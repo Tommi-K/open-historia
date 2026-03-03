@@ -4,7 +4,7 @@ const baseStyle: React.CSSProperties = {
     position: 'fixed',
     backgroundColor: 'rgba(17, 24, 39, 0.9)',
     backdropFilter: 'blur(4px)',
-    zIndex: 1000,
+    zIndex: 9999,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -15,7 +15,7 @@ const baseStyle: React.CSSProperties = {
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.2)',
 };
 
-const Time: React.FC = () => {
+const main: React.FC = () => {
     return (
         <>
         {/* Date */}
@@ -68,4 +68,4 @@ const Time: React.FC = () => {
     );
 };
 
-export default Time;
+export default main;

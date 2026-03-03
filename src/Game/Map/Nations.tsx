@@ -1,80 +1,60 @@
-import { useEffect, useState } from 'react';
-import { useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet.vectorgrid';
+import { useEffect, useState, useMemo } from 'react';
+import { Protocol } from 'pmtiles';
+import * as maplibregl from 'maplibre-gl';
+import { Source, Layer } from 'react-map-gl/maplibre';
+
+const protocol = new Protocol();
+maplibregl.addProtocol('pmtiles', protocol.tile);
 
 const WorldMap = () => {
-    const map = useMap();
-    const [countriesData, setCountriesData] = useState(null);
-    const [subdivisionsData, setSubdivisionsData] = useState(null);
     const [colorMap, setColorMap] = useState({});
-
-    const countryStyle = (properties) => {
-        const isoCode = properties["SOV_A3"];
-        const rgb = colorMap[isoCode];
-
-        const fillColor = rgb
-        ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
-        : 'white';
-
-        return {
-            color: 'black',
-            weight: 1,
-            fill: true,
-            fillColor: fillColor,
-            fillOpacity: 0.4
-        };
-    };
 
     useEffect(() => {
         fetch('/assets/colors.json')
         .then(res => res.json())
-        .then(data => setColorMap(data));
-
-        fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson')
-        .then(res => res.json())
-        .then(data => setCountriesData(data));
-
-        fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson')
-        .then(res => res.json())
-        .then(data => setSubdivisionsData(data));
+        .then(colors => {
+            setColorMap(colors);
+        })
     }, []);
 
-    useEffect(() => {
-        if (!map || !countriesData || !subdivisionsData) return;
 
-        let layers = [];
+    const fillStyle = useMemo(() => {
+        const stops = Object.entries(colorMap).map(([iso, rgb]) => [
+            iso,
+            `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
+        ]);
 
-        const countryGrid = L.vectorGrid.slicer(countriesData, {
-            rendererFactory: L.canvas.tile,
-            vectorTileLayerStyles: {
-                sliced: (properties) => countryStyle(properties)
-            },
-        }).addTo(map);
-
-        layers.push(countryGrid);
-
-
-
-        const subGrid = L.vectorGrid.slicer(subdivisionsData, {
-            rendererFactory: L.canvas.tile,
-            vectorTileLayerStyles: {
-                sliced: {
-                    color: 'black',
-                    weight: 0.2,
-                    fill: false
-                }
-            },
-        }).addTo(map);
-        layers.push(subGrid);
-
-
-        return () => {
-            layers.forEach(l => map.removeLayer(l));
+        return {
+            'fill-color': stops.length > 0
+            ? ['match', ['get', 'GID_0'], ...stops.flat(), 'rgba(200, 200, 200, 1)']
+            : 'white',
+            'fill-opacity': 0.5,
         };
-    }, [countriesData, subdivisionsData, colorMap, map]);
+    }, [colorMap]);
 
-    return null;
+    return (
+        <Source
+        type="vector"
+        url="pmtiles:///assets/world.pmtiles"
+        >
+
+        <Layer
+        type="fill"
+        source-layer="world"
+        paint={fillStyle}
+        />
+
+        <Layer
+        type="line"
+        source-layer="world"
+        paint={{
+            'line-color': 'white',
+            'line-width': 0.5,
+            'line-opacity': 0.3,
+        }}
+        />
+        </Source>
+    );
 };
 
 export default WorldMap;

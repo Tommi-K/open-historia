@@ -1,51 +1,54 @@
-import { MapContainer, TileLayer} from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
+import Map from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
-import Nations from './Nations'
+import WorldMap from './Nations';
 
 function App() {
-
     return (
-        <div style={{
-            height: '100vh',
-            width: '100vw'
-        }}>
+        <div style={{ height: '100vh', width: '100vw', backgroundColor: '#000' }}>
+        <Map
+            initialViewState={{
+                longitude: 0,
+                latitude: 0,
+                zoom: 3.5
+            }}
+            minZoom={2.25}
+            maxZoom={16}
+            doubleClickZoom={false}
 
-        <MapContainer
             maxBounds={[
-                [-80, -Infinity],
-                [90, Infinity]
+                [-Infinity, -80],
+                [Infinity, 85]
             ]}
 
-            maxBoundsViscosity={1}
-            minZoom={3.3}
-            zoom={3.5}
-
-
-            center={[0,0]}
-
-            zoomControl={false}
+            cursor="default"
             attributionControl={false}
 
-            style={{
-                height: '100%',
-                width: '100%',
-                backgroundColor: '#000000',
-                cursor: 'default'
-        }}
+            dragRotate={false}
+            touchPitch={false}
+            pitchWithRotate={false}
 
-        preferCanvas={true}
-        >
+            mapStyle={{
+                version: 8,
+                sources: {
+                    'satellite': {
+                        type: 'raster',
+                tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+                tileSize: 256
+                    }
+                },
+                layers: [{
+                    id: 'satellite-layer',
+                type: 'raster',
+                source: 'satellite'
+                }]
+            }}
+            >
 
-        <TileLayer // Satelite
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        />
-
-        <Nations />
-
-        </MapContainer>
-    </div>
-    )
+            <WorldMap />
+        </Map>
+        </div>
+    );
 }
 
-export default App
+export default App;
