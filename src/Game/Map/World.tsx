@@ -29,13 +29,15 @@ function App() {
         pitchWithRotate={false}
         dragPan={true}
 
+        projection="mercator"
+
         reuseMaps
         fadeDuration={0}
         collectResourceTiming={false}
 
         terrain={{
             source: 'terrain-source',
-            exaggeration: 30
+            exaggeration: 25
         }}
 
         mapStyle={{
@@ -59,8 +61,17 @@ function App() {
                 {
                     id: 'satellite-layer',
             type: 'raster',
-            source: 'satellite'
+            source: 'satellite',
+                },
+            {
+                id: 'hills',
+                type: 'hillshade',
+                source: 'terrain-source',
+                paint: {
+                    'hillshade-shadow-color': '#000',
+                    'hillshade-exaggeration': 0.1
                 }
+            },
             ]
         }}
         >

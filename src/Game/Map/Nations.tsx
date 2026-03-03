@@ -48,9 +48,17 @@ const WorldMap = () => {
         type="line"
         source-layer="world"
         paint={{
-            'line-color': 'white',
-            'line-width': 0.5,
-            'line-opacity': 0.3,
+            'line-color': 'black',
+            'line-width': [
+                'interpolate', ['linear'], ['zoom'],
+                3.25, 0,
+                10, 3
+            ],
+            'line-opacity': [
+                'interpolate', ['linear'], ['zoom'],
+                3.25, 0.25,
+                10, 0.5
+            ],
         }}
         />
         </Source>
