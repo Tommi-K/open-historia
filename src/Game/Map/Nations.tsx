@@ -41,15 +41,15 @@ const WorldMap = () => {
 
         <Layer
         type="fill"
-        source-layer="world"
+        source-layer="regions"
         paint={fillStyle}
         />
 
         <Layer
         type="line"
-        source-layer="world"
+        source-layer="regions"
         paint={{
-            'line-color': '#000',
+            'line-color': '#0F0F0F',
             'line-width': [
                 'interpolate', ['linear'], ['zoom'],
                 3.25, 0,
