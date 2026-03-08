@@ -76,7 +76,17 @@ function App() {
               tileSize: 256,
               maxzoom: 5,
             },
+            "hillshade-source": {
+              type: "raster-dem",
+              tiles: [
+                "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+              ],
+              encoding: "terrarium",
+              tileSize: 256,
+              maxzoom: 5,
+            },
           },
+
           layers: [
             {
               id: "satellite-layer",
@@ -86,7 +96,7 @@ function App() {
             {
               id: "hills",
               type: "hillshade",
-              source: "terrain-source",
+              source: "hillshade-source",
               paint: {
                 "hillshade-shadow-color": "#000",
                 "hillshade-exaggeration": 0.1,

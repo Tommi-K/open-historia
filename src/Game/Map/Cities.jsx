@@ -67,9 +67,18 @@ const Cities = () => {
             'text-size': [
                 'interpolate', ['linear'], ['zoom'],
                 3, [
-                    'interpolate', ['linear'], ['get', 'population'],
-                    100000, 6,
-                    1000000, 10
+                    '*', // Increase size for capitals + cities over 2.5m
+                    [
+                        'interpolate', ['linear'], ['get', 'population'],
+                        100000, 6,
+                        1000000, 10
+                    ],
+                    [
+                        'case',
+                        ['==', ['get', 'capital'], 'primary'], 2.5,
+                        ['>=', ['get', 'population'], 2500000], 2,
+                        1
+                    ]
                 ],
                 10, 22
             ],

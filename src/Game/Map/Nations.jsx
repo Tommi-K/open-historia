@@ -11,11 +11,11 @@ const WorldMap = () => {
 
   useEffect(() => {
     fetch("/assets/colors.json")
-      .then((res) => res.json())
-      .then((colors) => {
-        setColorMap(colors);
-      })
-      .catch((err) => console.error("Napaka pri nalaganju barv:", err));
+    .then((res) => res.json())
+    .then((colors) => {
+      setColorMap(colors);
+    })
+    .catch((err) => console.error("Error reading colors:", err));
   }, []);
 
   // Country fill
@@ -39,7 +39,7 @@ const WorldMap = () => {
         "match",
         ["get", "GID_0"],
         ...stops.flat(),
-        fallbackColor,
+                            fallbackColor,
       ]
       : 'white',
       "fill-opacity": 0.5,
@@ -48,53 +48,38 @@ const WorldMap = () => {
 
   return (
     <>
-      {/* Regions */}
+    {/* Regions */}
       <Source type="vector" url="pmtiles:///assets/regions.pmtiles">
-        <Layer type="fill" source-layer="regions" paint={fillStyle} />
-
         <Layer
           type="line"
           source-layer="regions"
           paint={{
             "line-color": "#0F0F0F",
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              3.25,
-              0,
-              10,
-              1.5,
-            ],
-            "line-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              3.25,
-              0.25,
-              10,
-              1,
-            ],
+            "line-width": ["interpolate", ["linear"], ["zoom"], 3.25, 0, 10, 7],
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 3.25, 0.33, 10, 1]
           }}
         />
       </Source>
 
       {/* Nations */}
-      <Source
-        id="countries-source"
-        type="vector"
-        url="pmtiles:///assets/countries.pmtiles"
-      >
-        <Layer
-          id="countries-outline"
-          type="line"
-          source-layer="countries"
-          paint={{
-            "line-color": "#000",
-            "line-width": 1.5,
-            "line-opacity": 1,
-          }}
-        />
+      <Source id="countries-source" type="vector" url="pmtiles:///assets/countries.pmtiles">
+      <Layer
+        id="countries-fill"
+        type="fill"
+        source-layer="countries"
+        paint={fillStyle}
+      />
+
+      <Layer
+        id="countries-outline"
+        type="line"
+        source-layer="countries"
+        paint={{
+          "line-color": "#000",
+          "line-width": 1.5,
+          "line-opacity": 1,
+        }}
+      />
       </Source>
     </>
   );
