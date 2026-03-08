@@ -3,14 +3,12 @@ import { Protocol } from "pmtiles";
 import * as maplibregl from "maplibre-gl";
 import { Source, Layer } from "react-map-gl/maplibre";
 
-// Nastavitev protokola za PMTiles
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
 const WorldMap = () => {
   const [colorMap, setColorMap] = useState({});
 
-  // Pridobivanje barv iz lokalne datoteke
   useEffect(() => {
     fetch("/assets/colors.json")
       .then((res) => res.json())
@@ -20,30 +18,37 @@ const WorldMap = () => {
       .catch((err) => console.error("Napaka pri nalaganju barv:", err));
   }, []);
 
-  // Izračun stila za barvanje držav/regij
+  // Country fill
   const fillStyle = useMemo(() => {
     const stops = Object.entries(colorMap).map(([iso, rgb]) => [
       iso,
       `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
     ]);
 
+    const fallbackColor = [
+      "rgb",
+      ["+", 64, ["*", ["index-of", ["slice", ["get", "GID_0"], 0, 1], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
+      ["+", 64, ["*", ["index-of", ["slice", ["get", "GID_0"], 2, 3], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
+      ["+", 64, ["*", ["index-of", ["slice", ["get", "GID_0"], 1, 2], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]]
+    ];
+
     return {
       "fill-color":
-        stops.length > 0
-          ? [
-              "match",
-              ["get", "GID_0"],
-              ...stops.flat(),
-              "rgba(200, 200, 200, 1)",
-            ]
-          : "white",
+      stops.length > 0
+      ? [
+        "match",
+        ["get", "GID_0"],
+        ...stops.flat(),
+        fallbackColor,
+      ]
+      : 'white',
       "fill-opacity": 0.5,
     };
   }, [colorMap]);
 
   return (
     <>
-      {/* Vir za regije */}
+      {/* Regions */}
       <Source type="vector" url="pmtiles:///assets/regions.pmtiles">
         <Layer type="fill" source-layer="regions" paint={fillStyle} />
 
@@ -74,7 +79,7 @@ const WorldMap = () => {
         />
       </Source>
 
-      {/* Vir za obrobe držav */}
+      {/* Nations */}
       <Source
         id="countries-source"
         type="vector"

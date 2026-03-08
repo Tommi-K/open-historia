@@ -2,16 +2,16 @@ import React, { useState, useEffect } from "react";
 import Map from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import WorldMap from "./Nations";
+import Nations from "./Nations";
+import Cities from "./Cities";
+
 import UI from "../GameUI/main.jsx";
 
 function App() {
-  // Odstranili smo <"mercator" | "globe">
   const [projection, setProjection] = useState(() => {
     const saved = localStorage.getItem("Globe");
     return saved === "true" ? "globe" : "mercator";
   });
-
   useEffect(() => {
     const handleStorageChange = () => {
       const saved = localStorage.getItem("Globe");
@@ -20,7 +20,6 @@ function App() {
 
     window.addEventListener("storage", handleStorageChange);
 
-    // Preverjamo na 500ms, če se je kaj spremenilo v localStorage
     const interval = setInterval(handleStorageChange, 500);
 
     return () => {
@@ -96,7 +95,9 @@ function App() {
           ],
         }}
       >
-        <WorldMap />
+        <Nations />
+        <Cities />
+
       </Map>
 
       <UI />
