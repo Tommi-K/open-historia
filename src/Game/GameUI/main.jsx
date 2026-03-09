@@ -74,7 +74,7 @@ const Main = () => {
 
   const [isTerrainEnabled, setIsTerrainEnabled] = useState(() => {
     const saved = localStorage.getItem("Terrain");
-    return saved !== null ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
 
   useEffect(() => {
@@ -89,14 +89,14 @@ const Main = () => {
     localStorage.setItem("Terrain", JSON.stringify(isTerrainEnabled));
   }, [isTerrainEnabled]);
 
-  // FULLSCREEN FUNKCIJA
+  // FULLSCREEN FUNCTION
   const toggleFullscreen = (shouldBeFull) => {
     if (shouldBeFull) {
       if (!document.fullscreenElement) {
         document.documentElement
           .requestFullscreen()
           .catch((e) =>
-            console.error("Napaka pri vklopu celozaslonskega načina", e),
+            console.error("Error with fullscreen", e),
           );
       }
     } else {
@@ -108,7 +108,7 @@ const Main = () => {
 
   return (
     <>
-      {/* Datum */}
+      {/* Date */}
       <div
         style={{
           ...baseStyle,
@@ -121,7 +121,7 @@ const Main = () => {
         {dayjs().format("MMMM Do, YYYY")}
       </div>
 
-      {/* Prazen blok (Other) */}
+      {/* Time */}
       <div
         style={{
           ...baseStyle,
@@ -132,7 +132,7 @@ const Main = () => {
         }}
       />
 
-      {/* Advisor gumb */}
+      {/* Advisor */}
       <button
         style={{
           ...baseStyle,
@@ -144,7 +144,7 @@ const Main = () => {
         }}
       />
 
-      {/* Nastavitve gumb */}
+      {/* Settings */}
       <button
         onClick={() => setIsSettingsOpen(!isSettingsOpen)}
         style={{
@@ -160,7 +160,7 @@ const Main = () => {
         ⚙️
       </button>
 
-      {/* Meni za nastavitve */}
+      {/* Settings Menu */}
       {isSettingsOpen && (
         <div
           style={{

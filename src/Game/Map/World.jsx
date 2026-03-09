@@ -9,13 +9,21 @@ import UI from "../GameUI/main.jsx";
 
 function App() {
   const [projection, setProjection] = useState(() => {
-    const saved = localStorage.getItem("Globe");
-    return saved === "true" ? "globe" : "mercator";
+    const savedGlobe = localStorage.getItem("Globe");
+    return savedGlobe === "true" ? "globe" : "mercator";
   });
+  const [terrainEnabled, setTerrainEnabled] = useState(() => {
+    const savedTerrain = localStorage.getItem("Terrain");
+    return savedTerrain === "true";
+  });
+
   useEffect(() => {
     const handleStorageChange = () => {
-      const saved = localStorage.getItem("Globe");
-      setProjection(saved === "true" ? "globe" : "mercator");
+      const savedGlobe = localStorage.getItem("Globe");
+      setProjection(savedGlobe === "true" ? "globe" : "mercator");
+
+      const savedTerrain = localStorage.getItem("Terrain");
+      setTerrainEnabled(savedTerrain === "true");
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -39,24 +47,33 @@ function App() {
         minZoom={2.25}
         maxZoom={16}
         doubleClickZoom={false}
+
         maxBounds={[
           [-Infinity, -80],
           [Infinity, 85],
         ]}
+
         cursor="default"
         attributionControl={false}
         dragRotate={false}
         touchPitch={false}
         pitchWithRotate={false}
         dragPan={true}
-        projection={projection}
+
         reuseMaps
         fadeDuration={0}
         collectResourceTiming={false}
-        terrain={{
-          source: "terrain-source",
-          exaggeration: 30,
-        }}
+
+        projection={projection}
+        terrain={
+          terrainEnabled
+          ? {
+            source: "terrain-source",
+            exaggeration: 30,
+          }
+          : null
+        }
+
         mapStyle={{
           version: 8,
           sources: {
