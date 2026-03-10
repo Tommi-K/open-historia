@@ -53,7 +53,7 @@ const Main = () => {
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  const rightShift = isAdvisorOpen ? `calc(${ADVISOR_PANEL_WIDTH} + 1rem)` : "0.5rem";
+  const rightShift = isAdvisorOpen ? `calc(${ADVISOR_PANEL_WIDTH} + 0.5rem)` : "0.5rem";
 
   return (
     <>

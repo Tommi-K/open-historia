@@ -83,7 +83,7 @@ const SettingsMenu = ({
     <div
     style={{
         ...baseStyle,
-        top: "5rem",
+        top: "4.75rem",
         left: "0.5rem",
         width: "15rem",
         padding: "1rem",
@@ -93,12 +93,20 @@ const SettingsMenu = ({
         height: "auto",
     }}
     >
-    <h3 style={{ margin: "0 0 1.25rem 0", fontSize: "1.1rem", textAlign: "left" }}>
-    Map Settings
-    </h3>
-    <Toggle label="Fullscreen" enabled={isFullscreenEnabled} onToggle={onToggleFullscreen} />
-    <Toggle label="3D Globe" enabled={isGlobeEnabled} onToggle={onToggleGlobe} />
-    <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
+        <h3 style={{
+            margin: "0 -1rem 1rem -1rem",
+            padding: "0 1rem 1rem 1rem",
+            fontSize: "1.1rem",
+            textAlign: "left",
+            borderBottom: "1px solid rgba(255,255,255,0.1)"
+        }}>
+        Map Settings
+        </h3>
+
+
+        <Toggle label="Fullscreen" enabled={isFullscreenEnabled} onToggle={onToggleFullscreen} />
+        <Toggle label="3D Globe" enabled={isGlobeEnabled} onToggle={onToggleGlobe} />
+        <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
     </div>
 );
 
