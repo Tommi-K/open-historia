@@ -19,6 +19,9 @@ cd pax-historia
 # Install dependencies
 npm install
 
-# Start the development server
-npm run dev
+# Build the server
+npm run build
+
+# Start the server
+node server/server.js
 ```
