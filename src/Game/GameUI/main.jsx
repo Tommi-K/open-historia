@@ -60,9 +60,12 @@ const Main = ({ mapRef }) => {
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const [isFullscreenEnabled, setIsFullscreenEnabled] = useState(false);
   const [showWebGLWarning, setShowWebGLWarning] = useState(false);
-  const [geminiKey, setGeminiKey] = useState(() => {
-    return localStorage.getItem("gemini_api_key") || "";
-  });
+
+  // API provider state
+  const [apiProvider, setApiProvider] = useState(() => localStorage.getItem("api_provider") || "gemini");
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
+  const [customApiEndpoint, setCustomApiEndpoint] = useState(() => localStorage.getItem("custom_api_endpoint") || "http://localhost:11434/v1");
+
   const [isGlobeEnabled, setIsGlobeEnabled] = useState(() => {
     const saved = localStorage.getItem("Globe");
     return saved !== null ? JSON.parse(saved) : false;
@@ -73,82 +76,81 @@ const Main = ({ mapRef }) => {
   });
 
   useEffect(() => {
-    if (!checkWebGL()) {
-      setShowWebGLWarning(true);
-    }
+    if (!checkWebGL()) setShowWebGLWarning(true);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("Fullscreen", JSON.stringify(isFullscreenEnabled));
-  }, [isFullscreenEnabled]);
-  useEffect(() => {
-    localStorage.setItem("Globe", JSON.stringify(isGlobeEnabled));
-  }, [isGlobeEnabled]);
-  useEffect(() => {
-    localStorage.setItem("Terrain", JSON.stringify(isTerrainEnabled));
-  }, [isTerrainEnabled]);
-  useEffect(() => {
-    localStorage.setItem("gemini_api_key", geminiKey);
-  }, [geminiKey]);
+    useEffect(() => { localStorage.setItem("Fullscreen", JSON.stringify(isFullscreenEnabled)); }, [isFullscreenEnabled]);
+    useEffect(() => { localStorage.setItem("Globe", JSON.stringify(isGlobeEnabled)); }, [isGlobeEnabled]);
+    useEffect(() => { localStorage.setItem("Terrain", JSON.stringify(isTerrainEnabled)); }, [isTerrainEnabled]);
+    useEffect(() => { localStorage.setItem("gemini_api_key", geminiKey); }, [geminiKey]);
+    useEffect(() => { localStorage.setItem("custom_api_endpoint", customApiEndpoint); }, [customApiEndpoint]);
+    useEffect(() => { localStorage.setItem("api_provider", apiProvider); }, [apiProvider]);
 
-  const toggleFullscreen = (shouldBeFull) => {
-    if (shouldBeFull) {
-      if (!document.fullscreenElement) {
-        document.documentElement
-        .requestFullscreen()
-        .catch((e) => console.error("Error with fullscreen", e));
+    const toggleFullscreen = (shouldBeFull) => {
+      if (shouldBeFull) {
+        if (!document.fullscreenElement) {
+          document.documentElement
+          .requestFullscreen()
+          .catch((e) => console.error("Error with fullscreen", e));
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen();
+        }
       }
-    } else {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
-  };
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreenEnabled(!!document.fullscreenElement);
     };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
 
-  const rightShift = isAdvisorOpen ? `calc(${ADVISOR_PANEL_WIDTH} + 0.5rem)` : "0.5rem";
+    useEffect(() => {
+      const handleFullscreenChange = () => setIsFullscreenEnabled(!!document.fullscreenElement);
+      document.addEventListener("fullscreenchange", handleFullscreenChange);
+      return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    }, []);
 
-  return (
-    <>
-    {showWebGLWarning && <WebGLWarningPopup />}
-    <DateWidget rightShift={rightShift} />
-    <Toolbar onOpenAdvisor={() => setIsAdvisorOpen(true)} />
-    <Other />
-    <Search mapRef={mapRef} rightShift={rightShift} />
-    <AdvisorButton
-    isAdvisorOpen={isAdvisorOpen}
-    rightShift={rightShift}
-    onToggle={() => setIsAdvisorOpen(!isAdvisorOpen)}
-    />
-    <AdvisorPanel isAdvisorOpen={isAdvisorOpen} />
-    <SettingsButton onToggle={() => setIsSettingsOpen(!isSettingsOpen)} />
-    {isSettingsOpen && (
-      <SettingsMenu
-      discordUrl="https://discord.gg/C3AVwHacZ4"
-      githubUrl="https://github.com/Tommi-K/pax-historia"
-      geminiKey={geminiKey}
-      onGeminiKeyChange={setGeminiKey}
-      isFullscreenEnabled={isFullscreenEnabled}
-      isGlobeEnabled={isGlobeEnabled}
-      isTerrainEnabled={isTerrainEnabled}
-      onToggleFullscreen={() => {
-        const newState = !isFullscreenEnabled;
-        setIsFullscreenEnabled(newState);
-        toggleFullscreen(newState);
-      }}
-      onToggleGlobe={() => setIsGlobeEnabled(!isGlobeEnabled)}
-      onToggleTerrain={() => setIsTerrainEnabled(!isTerrainEnabled)}
+    // Derive the active config for use anywhere in the app
+    const activeApiConfig = apiProvider === "gemini"
+    ? { provider: "gemini", apiKey: geminiKey, endpoint: null }
+    : { provider: "custom", apiKey: null, endpoint: customApiEndpoint };
+
+    const rightShift = isAdvisorOpen ? `calc(${ADVISOR_PANEL_WIDTH} + 0.5rem)` : "0.5rem";
+
+    return (
+      <>
+      {showWebGLWarning && <WebGLWarningPopup />}
+      <DateWidget rightShift={rightShift} />
+      <Toolbar onOpenAdvisor={() => setIsAdvisorOpen(true)} />
+      <Other />
+      <Search mapRef={mapRef} rightShift={rightShift} />
+      <AdvisorButton
+      isAdvisorOpen={isAdvisorOpen}
+      rightShift={rightShift}
+      onToggle={() => setIsAdvisorOpen(!isAdvisorOpen)}
       />
-    )}
-    </>
-  );
+      <AdvisorPanel isAdvisorOpen={isAdvisorOpen} />
+      <SettingsButton onToggle={() => setIsSettingsOpen(!isSettingsOpen)} />
+      {isSettingsOpen && (
+        <SettingsMenu
+        discordUrl="https://discord.gg/C3AVwHacZ4"
+        githubUrl="https://github.com/Tommi-K/pax-historia"
+        isFullscreenEnabled={isFullscreenEnabled}
+        isGlobeEnabled={isGlobeEnabled}
+        isTerrainEnabled={isTerrainEnabled}
+        onToggleFullscreen={() => {
+          const newState = !isFullscreenEnabled;
+          setIsFullscreenEnabled(newState);
+          toggleFullscreen(newState);
+        }}
+        onToggleGlobe={() => setIsGlobeEnabled(!isGlobeEnabled)}
+        onToggleTerrain={() => setIsTerrainEnabled(!isTerrainEnabled)}
+        apiProvider={apiProvider}
+        onApiProviderChange={setApiProvider}
+        geminiKey={geminiKey}
+        onGeminiKeyChange={setGeminiKey}
+        customApiEndpoint={customApiEndpoint}
+        onCustomApiEndpointChange={setCustomApiEndpoint}
+        />
+      )}
+      </>
+    );
 };
 
 export default Main;
