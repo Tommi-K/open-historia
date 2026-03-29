@@ -4,6 +4,7 @@ import {
     providerSupportsModelDiscovery,
     setProviderField,
 } from "./providerConfig.js";
+import { JSON_URLS, readJson } from "../../runtime/assets.js";
 
 // main.jsx - AI chat module
 // Supports Gemini, OpenAI, Anthropic, and OpenAI-compatible endpoints
@@ -437,20 +438,34 @@ async function callAI(systemPrompt, history, opts) {
 
 let advisorTemplate = "";
 let leaderTemplate = "";
+let promptsReady = null;
 
-const promptsReady = fetch("/saves/save0/prompts.json")
-.then((res) => res.json())
-.then((data) => {
-    advisorTemplate = data.advisor ?? "";
-    leaderTemplate = data.leader ?? "";
-})
-.catch(() => { console.warn("Could not load prompts.json"); });
+async function ensurePromptsLoaded() {
+    if (!promptsReady) {
+        promptsReady = readJson(JSON_URLS.prompts, { defaultValue: {} })
+        .then((data) => {
+            advisorTemplate = data.advisor ?? "";
+            leaderTemplate = data.leader ?? "";
+            return data;
+        })
+        .catch((error) => {
+            console.warn("Could not load prompts.json", error);
+            advisorTemplate = "";
+            leaderTemplate = "";
+            return {};
+        });
+    }
+
+    await promptsReady;
+}
 
 async function buildAdvisorSystemPrompt() {
-    await promptsReady;
-    const gameData = await fetch("/saves/save0/game.json").then((res) => res.json());
-    const actionData = await fetch("/saves/save0/storage/actions.json").then((res) => res.json()).catch(() => []);
-    const chatData = await fetch("/saves/save0/storage/chat.json").then((res) => res.json()).catch(() => []);
+    await ensurePromptsLoaded();
+    const [gameData, actionData, chatData] = await Promise.all([
+        readJson(JSON_URLS.game, { defaultValue: {} }),
+        readJson(JSON_URLS.actions, { defaultValue: [] }),
+        readJson(JSON_URLS.chat, { defaultValue: [] }),
+    ]);
 
     return advisorTemplate
     .replace(/\$\{country\}/g, gameData.country)
@@ -461,11 +476,13 @@ async function buildAdvisorSystemPrompt() {
 }
 
 export async function buildDiplomaticSystemPrompt(countries, playerCountry, gameDate) {
-    await promptsReady;
+    await ensurePromptsLoaded();
     const participantList = countries.map((country) => `- ${country}`).join("\n");
-    const gameData = await fetch("/saves/save0/game.json").then((res) => res.json());
-    const actionData = await fetch("/saves/save0/storage/actions.json").then((res) => res.json()).catch(() => []);
-    const chatData = await fetch("/saves/save0/storage/chat.json").then((res) => res.json()).catch(() => []);
+    const [gameData, actionData, chatData] = await Promise.all([
+        readJson(JSON_URLS.game, { defaultValue: {} }),
+        readJson(JSON_URLS.actions, { defaultValue: [] }),
+        readJson(JSON_URLS.chat, { defaultValue: [] }),
+    ]);
 
     return leaderTemplate
     .replace(/\$\{participantList\}/g, participantList)
