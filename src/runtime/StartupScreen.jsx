@@ -1,3 +1,5 @@
+import React from "react";
+
 const formatBytes = (bytes) => {
   if (!bytes) return "0 B";
 
@@ -25,64 +27,80 @@ const StartupScreen = ({
   const secondsLeft = Math.max(0, Math.ceil((timeBudgetMs - elapsedMs) / 1000));
 
   return (
-    <div className="startup-shell">
-      <div className="startup-aurora startup-aurora-left" />
-      <div className="startup-aurora startup-aurora-right" />
-      <div className="startup-grid" />
+    /* Applied the loading screen asset as a cover background image */
+    <div
+    className="startup-shell"
+    style={{
+      backgroundImage: "url('/loading_screen.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          width: "100vw",
+          height: "100vh"
+    }}
+    >
+    <div className="startup-aurora startup-aurora-left" />
+    <div className="startup-aurora startup-aurora-right" />
+    <div className="startup-grid" />
 
-      <div className="startup-panel">
-        <div className="startup-eyebrow">PAX HISTORIA</div>
+    {/* Added inline styles for transparency and optional glassmorphism blur */}
+    <div
+    className="startup-panel"
+    style={{
+      backgroundColor: "rgba(0, 0, 0, 0.65)", // Black with 65% opacity
+          backdropFilter: "blur(10px)", // Optional: Blurs the background image behind the panel
+          WebkitBackdropFilter: "blur(10px)", // Safari support
+          padding: "2rem",
+          borderRadius: "1rem"
+    }}
+    >
 
-        <div className="startup-orbit">
-          <div className="startup-orbit-ring startup-orbit-ring-large" />
-          <div className="startup-orbit-ring startup-orbit-ring-small" />
-          <div className="startup-core">
-            <span>PH</span>
-          </div>
-          <div className="startup-scanline" />
-        </div>
+    {/* Replaced the rings and PH text with the image logo */}
+    <div className="startup-orbit" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+    <img
+    src="/logo.png"
+    alt="Pax Historia Logo"
+    style={{ width: "12rem", height: "12rem", objectFit: "contain" }}
+    />
+    <div className="startup-scanline" />
+    </div>
 
-        <h1 className="startup-title">
-          {timedOut ? "Continuing with live loading" : "Preparing the world"}
-        </h1>
-        <p className="startup-subtitle">
-          Up to 30 seconds are reserved for warming critical data, archives,
-          initial world textures, and the first world render. If the budget
-          runs out, the remaining assets continue loading in-game.
-        </p>
+    <h1 className="startup-title">
+    {timedOut ? "Continuing with live loading" : "Preparing the world"}
+    </h1>
 
-        <div className="startup-progress-card">
-          <div className="startup-progress-meta">
-            <span>{stage}</span>
-            <span>{progress}%</span>
-          </div>
-          <div className="startup-progress-track">
-            <div
-              className="startup-progress-fill"
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </div>
-        </div>
+    <div className="startup-progress-card">
+    <div className="startup-progress-meta">
+    <span>{stage}</span>
+    <span>{progress}%</span>
+    </div>
+    <div className="startup-progress-track">
+    <div
+    className="startup-progress-fill"
+    style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+    />
+    </div>
+    </div>
 
-        <div className="startup-status-row">
-          <span>
-            {timedOut ? "Background loading enabled" : `${secondsLeft}s remaining`}
-          </span>
-          <span>{formatBytes(loadedBytes)} cached so far</span>
-        </div>
+    <div className="startup-status-row">
+    <span>
+    {timedOut ? "Background loading enabled" : `${secondsLeft}s remaining`}
+    </span>
+    <span>{formatBytes(loadedBytes)} cached so far</span>
+    </div>
 
-        <div className="startup-steps">
-          {steps.map((step) => (
-            <div
-              key={step.id}
-              className={`startup-step startup-step-${step.status}`}
-            >
-              <span className="startup-step-indicator" />
-              <span>{step.label}</span>
-            </div>
-          ))}
-        </div>
+    <div className="startup-steps">
+    {steps.map((step) => (
+      <div
+      key={step.id}
+      className={`startup-step startup-step-${step.status}`}
+      >
+      <span className="startup-step-indicator" />
+      <span>{step.label}</span>
       </div>
+    ))}
+    </div>
+    </div>
     </div>
   );
 };

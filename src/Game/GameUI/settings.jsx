@@ -532,7 +532,7 @@ const SettingsMenu = ({
         <div
         style={{
             ...baseStyle,
-            top: "4.5rem",
+            top: "4.75rem",
             left: "0.5rem",
             width: "22rem",
             maxWidth: "calc(100vw - 1rem)",
