@@ -1,6 +1,9 @@
 import dayjs from "dayjs";
 import { callAI } from "./main.jsx";
-import { GAMEPLAY_PROMPT_DEFAULTS } from "./gameplayPrompts.js";
+import {
+  GAMEPLAY_PROMPT_DEFAULTS,
+  normalizePromptPack,
+} from "./gameplayPrompts.js";
 import {
   JSON_URLS,
   loadCountryNames,
@@ -130,20 +133,8 @@ const renderTemplate = (template, variables) =>
     return value == null ? "" : String(value);
   });
 
-const normalizePromptCatalog = (rawPrompts) => {
-  const prompts = rawPrompts && typeof rawPrompts === "object" ? rawPrompts : {};
-  const tasks = prompts.tasks && typeof prompts.tasks === "object" ? prompts.tasks : {};
-
-  return Object.fromEntries(
-    Object.keys(GAMEPLAY_PROMPT_DEFAULTS).map((key) => [
-      key,
-      normalizeString(prompts[key]) || normalizeString(tasks[key]) || GAMEPLAY_PROMPT_DEFAULTS[key],
-    ]),
-  );
-};
-
 const loadPromptCatalog = async ({ force = false } = {}) =>
-  normalizePromptCatalog(await readJson(JSON_URLS.prompts, { defaultValue: {}, force }));
+  normalizePromptPack(await readJson(JSON_URLS.prompts, { defaultValue: {}, force }));
 
 const buildEventHistoryText = (events, { limit = 10 } = {}) => {
   const normalizedEvents = normalizeEvents(events);
@@ -283,6 +274,134 @@ const buildWorldSummary = async (bundle) => {
   ].join("\n");
 };
 
+const formatDateReadable = (value) => {
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format("D MMMM YYYY") : normalizeString(value);
+};
+
+const buildDifficultyGuidance = (difficulty, mode = "general") => {
+  const normalizedDifficulty = normalizeString(difficulty).toLowerCase();
+  const intro =
+    mode === "chats"
+      ? "Diplomatic concessions and cooperation should scale with the difficulty."
+      : "Long-term success and geopolitical leverage should scale with the difficulty.";
+
+  switch (normalizedDifficulty) {
+    case "easy":
+      return `${intro} The player can convert reasonable preparation into results relatively easily.`;
+    case "hard":
+      return `${intro} The player should need stronger leverage, preparation, and credibility before major outcomes stick.`;
+    case "very hard":
+    case "extreme":
+      return `${intro} Major outcomes should require overwhelming preparation, sustained leverage, or unusually favorable conditions.`;
+    default:
+      return `${intro} Outcomes should feel plausible and earned without becoming static.`;
+  }
+};
+
+const buildAdvisorHistoryText = (messages, { limit = 18 } = {}) => {
+  const normalizedMessages = normalizeArray(messages)
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const role = normalizeString(entry.role || entry.speaker || "message");
+      const text = normalizeString(entry.text || entry.content || entry.message);
+      if (!text) {
+        return null;
+      }
+
+      return `${role}: ${text}`;
+    })
+    .filter(Boolean);
+
+  if (normalizedMessages.length === 0) {
+    return "No advisor messages are currently recorded.";
+  }
+
+  return normalizedMessages.slice(-limit).join("\n");
+};
+
+const buildDetailedChatHistoryText = (chats, { limit = 8 } = {}) => {
+  const normalizedChats = normalizeChats(chats);
+  if (normalizedChats.length === 0) {
+    return "No chats occurred in these rounds.";
+  }
+
+  return normalizedChats
+    .slice(0, limit)
+    .map((chat, index) => {
+      const header = `Chat ${index + 1}: ${chat.countries.map((country) => country.name).join(", ")}`;
+      const body =
+        chat.messages.length > 0
+          ? chat.messages
+              .slice(-10)
+              .map((message) => `${message.speaker || message.role}: ${message.text}`)
+              .join("\n")
+          : "No messages yet.";
+      return `${header}\n${body}`;
+    })
+    .join("\n\n");
+};
+
+const buildRecentRoundsWithDates = (bundle) => {
+  const history = normalizeArray(bundle.world?.simulationHistory);
+
+  if (history.length === 0) {
+    return `Current round only: ${bundle.game.gameDate || "unknown date"}`;
+  }
+
+  return history
+    .slice(0, 8)
+    .map((entry) => `${entry.fromDate || "unknown"} -> ${entry.toDate || entry.date || "unknown"}`)
+    .join("; ");
+};
+
+const buildPlayerPolityRegionsText = async (bundle) => {
+  const playerCode = normalizeString(bundle.game.country);
+  if (!playerCode) {
+    return "No player polity is currently set.";
+  }
+
+  const world = normalizeWorldState(bundle.world);
+  const regionEntries = Object.entries(world.regionOwnershipOverrides);
+  if (regionEntries.length === 0) {
+    return "No explicit player region override list is currently recorded.";
+  }
+
+  const regionCatalog = await loadRegionCatalog();
+  const regionLookup = new Map(regionCatalog.map((region) => [region.id, region]));
+  const playerRegions = regionEntries
+    .filter(([, ownerCode]) => normalizeString(ownerCode).toLowerCase() === playerCode.toLowerCase())
+    .slice(0, 24)
+    .map(([regionId]) => {
+      const region = regionLookup.get(regionId);
+      return region?.name || regionId;
+    });
+
+  if (playerRegions.length === 0) {
+    return "No explicit player region override list is currently recorded.";
+  }
+
+  return playerRegions.join(", ");
+};
+
+const resolveHelperValues = (helperTemplates, variables) => {
+  let resolved = {};
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    resolved = Object.fromEntries(
+      Object.entries(helperTemplates).map(([key, template]) => [
+        key,
+        renderTemplate(template, { ...variables, ...resolved }),
+      ]),
+    );
+  }
+
+  return resolved;
+};
+
 const buildTemplateVariables = async (
   bundle,
   {
@@ -297,48 +416,64 @@ const buildTemplateVariables = async (
     targetDate = "",
   } = {},
 ) => {
+  const normalizedChat = chat && typeof chat === "object" ? normalizeChats([chat])[0] : null;
+  const regionCatalog = await loadRegionCatalog();
   const chatHistory =
-    chat && typeof chat === "object"
-      ? normalizeChats([chat])[0]?.messages
-          ?.map((message) => `${message.speaker || message.role}: ${message.text}`)
-          .join("\n") || "No chat history."
-      : "No chat history.";
-
-  const chatParticipants =
-    chat && typeof chat === "object"
-      ? normalizeChats([chat])[0]?.countries?.map((country) => country.name).join(", ") || ""
-      : "";
-
-  const lastSpeaker =
-    chat && typeof chat === "object"
-      ? normalizeChats([chat])[0]?.messages?.at(-1)?.speaker || ""
-      : "";
+    normalizedChat?.messages?.map((message) => `${message.speaker || message.role}: ${message.text}`).join("\n") ||
+    "No chat history.";
+  const chatParticipants = normalizedChat?.countries?.map((country) => country.name).join(", ") || "";
+  const lastSpeaker = normalizedChat?.messages?.at(-1)?.speaker || "";
+  const date = bundle.game.gameDate || "";
+  const target = targetDate || bundle.game.gameDate || "";
+  const worldSummary = await buildWorldSummary(bundle);
+  const recentEvents = buildEventHistoryText(bundle.events);
+  const allActions = buildActionHistoryText(bundle.actions, { includeResolved: true });
 
   return {
     actionInput,
-    allActions: buildActionHistoryText(bundle.actions, { includeResolved: true }),
+    advisorMessages: buildAdvisorHistoryText(bundle.advisor || []),
+    allActions,
     catalystChoice,
+    catalystDate: date,
     catalystHistory,
+    catalystPercent:
+      normalizeArray(bundle.world?.activeCatalyst?.history).length > 0
+        ? `${Math.min(100, normalizeArray(bundle.world?.activeCatalyst?.history).length * 50)}%`
+        : "0%",
     catalystOpening,
     catalystPremise,
     chatHistory,
+    chatHistoryLong: buildDetailedChatHistoryText(bundle.chats),
     chatParticipants,
     chatSummary: buildChatSummaryText(bundle.chats),
     chatsToConsolidate: buildChatSummaryText(bundle.chats, { limit: 12 }),
-    date: bundle.game.gameDate || "",
+    date,
+    dateReadable: formatDateReadable(date),
     difficulty: bundle.game.difficulty || "standard",
+    difficultyGuidanceChats: buildDifficultyGuidance(bundle.game.difficulty, "chats"),
+    difficultyGuidanceJumpForward: buildDifficultyGuidance(bundle.game.difficulty, "jump"),
     eventsToConsolidate: eventsToConsolidate || buildEventHistoryText(bundle.events, { limit: 12 }),
     gameMasterRequest,
     language: bundle.world.language || bundle.game.language || "English",
     lastSpeaker,
+    numberOfRegions: String(regionCatalog.length),
     plannedActions: buildActionHistoryText(bundle.actions),
     playerPolity: bundle.game.country || "Unknown polity",
-    recentEvents: buildEventHistoryText(bundle.events),
+    playerBattalionSummaries: "No battalion summary data is currently available in the lightweight runtime.",
+    playerPolityRegions: await buildPlayerPolityRegionsText(bundle),
+    recentEvents,
+    recentEventsLong: buildEventHistoryText(bundle.events, { limit: 24 }),
+    recentRoundsWithDates: buildRecentRoundsWithDates(bundle),
+    respondingPolityName:
+      normalizedChat?.countries.find((country) => country.name !== bundle.game.country)?.name || "",
     simulationRules: normalizeString(bundle.world.simulationRules) || "No extra simulation rules were provided.",
-    targetDate: targetDate || bundle.game.gameDate || "",
+    startDate: bundle.game.startDate || "",
+    targetDate: target,
+    targetDateReadable: formatDateReadable(target),
     worldBeforeRoundOne:
       normalizeString(bundle.world.startingTimelineText) || "No pre-game world briefing was provided.",
-    worldSummary: await buildWorldSummary(bundle),
+    worldSummary,
+    worldSummaryNoCity: worldSummary,
   };
 };
 
@@ -367,7 +502,11 @@ const withTimeout = async (promise, timeoutMs, timeoutMessage) => {
 
 const runJsonTask = async (taskKey, { fallback, timeoutMs = 12000, userMessage, variables }) => {
   const prompts = await loadPromptCatalog();
-  const systemPrompt = renderTemplate(prompts[taskKey], variables);
+  const helperValues = resolveHelperValues(prompts.helpers, variables);
+  const systemPrompt = renderTemplate(prompts.tasks[taskKey], {
+    ...variables,
+    ...helperValues,
+  });
 
   try {
     const raw = await withTimeout(

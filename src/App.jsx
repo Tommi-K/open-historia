@@ -7,7 +7,7 @@ import {
   createInitialStartupState,
   runStartupPreload,
 } from "./runtime/preload.js";
-import { ensureScenarioCatalog, useScenarioState } from "./runtime/scenarios.js";
+import { ensureLibraryCatalog, useLibraryState } from "./runtime/library.js";
 
 const WorldShell = {
   backgroundColor: "#000",
@@ -44,7 +44,7 @@ function App() {
     const saved = localStorage.getItem("Terrain");
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const { token: scenarioToken } = useScenarioState();
+  const { token: libraryToken } = useLibraryState();
 
   useEffect(() => {
     localStorage.setItem("Globe", JSON.stringify(isGlobeEnabled));
@@ -94,12 +94,12 @@ function App() {
 
     setStartupState((current) => ({
       ...current,
-      stage: "Syncing scenario catalog",
+      stage: "Syncing games and scenarios",
     }));
 
-    ensureScenarioCatalog()
+    ensureLibraryCatalog()
       .catch((error) => {
-        console.warn("Failed to load scenario catalog before startup preload:", error);
+        console.warn("Failed to load library catalog before startup preload:", error);
       })
       .finally(() => {
         if (!isActive) return;
@@ -156,7 +156,7 @@ function App() {
     <>
     <div style={WorldShell}>
     <Map
-    key={`map-${scenarioToken || "default"}`}
+    key={`map-${libraryToken || "default"}`}
     mapRef={mapRef}
     projection={isGlobeEnabled ? "globe" : "mercator"}
     terrainEnabled={isTerrainEnabled}
@@ -166,7 +166,7 @@ function App() {
     </div>
     {isReady && (
       <UI
-      key={`ui-${scenarioToken || "default"}`}
+      key={`ui-${libraryToken || "default"}`}
       isGlobeEnabled={isGlobeEnabled}
       isTerrainEnabled={isTerrainEnabled}
       mapRef={mapRef}

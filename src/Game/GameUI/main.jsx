@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { SettingsButton, SettingsMenu } from "./settings";
-import { ScenarioTopBar, TOP_BAR_OFFSET } from "./scenarios";
+import { LibraryTopBar, TOP_BAR_OFFSET } from "./libraryBar";
 import { DateWidget } from "./time";
 import { Other } from "./other";
 import { Toolbar } from "./chat";
@@ -181,7 +181,7 @@ const Main = ({
   return (
     <>
       {showWebGLWarning && <WebGLWarningPopup />}
-      <ScenarioTopBar />
+      <LibraryTopBar />
       <DateWidget
         activePanel={activeBottomPanel}
         mapRef={mapRef}
