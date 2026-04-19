@@ -240,7 +240,7 @@ const AdvisorPanel = ({ isAdvisorOpen }) => {
         <>
         <MarkdownStyleInjector />
         <div style={{
-            position: "fixed", top: 0,
+            position: "fixed", bottom: 0,
             right: isAdvisorOpen ? 0 : `calc(-${ADVISOR_PANEL_WIDTH} - 1rem)`,
             width: ADVISOR_PANEL_WIDTH, height: "calc(100vh - 64px)",
             backgroundColor: "rgba(17, 24, 39, 0.95)", backdropFilter: "blur(8px)",
