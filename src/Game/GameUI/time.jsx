@@ -30,49 +30,49 @@ const ensureTimelineStyles = () => {
     const style = document.createElement("style");
     style.id = TIMELINE_STYLE_ID;
     style.textContent = `
-      @keyframes timeline-spin {
+    @keyframes timeline-spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
-      }
+    }
 
-      .timeline-markdown p {
+    .timeline-markdown p {
         margin: 0 0 0.45rem 0;
-      }
+    }
 
-      .timeline-markdown p:last-child {
+    .timeline-markdown p:last-child {
         margin-bottom: 0;
-      }
+    }
 
-      .timeline-markdown strong {
+    .timeline-markdown strong {
         color: rgba(255,255,255,0.96);
-      }
+    }
 
-      .timeline-markdown em {
+    .timeline-markdown em {
         color: rgba(216,227,255,0.78);
-      }
+    }
 
-      .timeline-markdown ul,
-      .timeline-markdown ol {
+    .timeline-markdown ul,
+    .timeline-markdown ol {
         margin: 0.35rem 0 0.45rem 1.1rem;
         padding: 0;
-      }
+    }
 
-      .timeline-markdown li {
+    .timeline-markdown li {
         margin-bottom: 0.18rem;
-      }
+    }
 
-      .timeline-markdown blockquote {
+    .timeline-markdown blockquote {
         border-left: 2px solid rgba(96,165,250,0.55);
         color: rgba(214,226,255,0.68);
         margin: 0.55rem 0;
         padding-left: 0.8rem;
-      }
+    }
 
-      .timeline-markdown code {
+    .timeline-markdown code {
         background: rgba(15,23,42,0.55);
         border-radius: 4px;
         padding: 0.05rem 0.32rem;
-      }
+    }
     `;
     document.head.appendChild(style);
 };
@@ -84,46 +84,46 @@ const SpinnerRing = ({ size = 14, tone = "rgba(255,255,255,0.88)" }) => {
 
     return (
         <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-            style={{ animation: "timeline-spin 0.7s linear infinite" }}
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        style={{ animation: "timeline-spin 0.7s linear infinite" }}
         >
-            <circle cx="12" cy="12" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="2.2" />
-            <path d="M12 4a8 8 0 0 1 8 8" stroke={tone} strokeWidth="2.2" strokeLinecap="round" />
+        <circle cx="12" cy="12" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="2.2" />
+        <path d="M12 4a8 8 0 0 1 8 8" stroke={tone} strokeWidth="2.2" strokeLinecap="round" />
         </svg>
     );
 };
 
 const CloseIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
 );
 
 const CalendarIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M8 2v4" />
-        <path d="M16 2v4" />
-        <rect x="3" y="4" width="18" height="18" rx="2" />
-        <path d="M3 10h18" />
+    <path d="M8 2v4" />
+    <path d="M16 2v4" />
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M3 10h18" />
     </svg>
 );
 
 const MapIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
-        <path d="M9 3v15" />
-        <path d="M15 6v15" />
+    <path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
+    <path d="M9 3v15" />
+    <path d="M15 6v15" />
     </svg>
 );
 
 const ChevronDownIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" />
+    <path d="m6 9 6 6 6-6" />
     </svg>
 );
 
@@ -144,7 +144,7 @@ const panelSurface = {
 const widgetSurface = {
     alignItems: "center",
     backdropFilter: "blur(4px)",
-    backgroundColor: "rgba(17, 24, 39, 0.9)",
+    backgroundColor: "rgba(17, 24, 39, 0.95)",
     border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: "12px",
     boxShadow: "0 4px 6px -1px rgba(0,0,0,0.2)",
@@ -221,7 +221,7 @@ const resolveRegionName = (transfer, regionLookup) => {
 };
 
 const getEventMapChangeCount = (event) =>
-    (event?.impacts?.regionTransfers?.length || 0) + (event?.impacts?.polityChanges?.length || 0);
+(event?.impacts?.regionTransfers?.length || 0) + (event?.impacts?.polityChanges?.length || 0);
 
 const collectEventTags = (event, { polityLookup, regionLookup }) => {
     const labels = new Set();
@@ -340,8 +340,8 @@ const loadFeatureBounds = async (archiveUrl, layerName, keyResolvers) => {
         const feature = layer.feature(index);
         const props = feature.properties ?? {};
         const key = keyResolvers
-            .map((resolver) => resolver(props))
-            .find((candidate) => candidate != null && String(candidate).trim() !== "");
+        .map((resolver) => resolver(props))
+        .find((candidate) => candidate != null && String(candidate).trim() !== "");
 
         if (!key) {
             continue;
@@ -369,9 +369,9 @@ const loadRegionBounds = async () => {
             "regions",
             [
                 (props) => props?.GID_1,
-                (props) => props?.gid_1,
-                (props) => props?.HASC_1,
-                (props) => props?.fid,
+                                                (props) => props?.gid_1,
+                                                (props) => props?.HASC_1,
+                                                (props) => props?.fid,
             ],
         );
     }
@@ -386,9 +386,9 @@ const loadCountryBounds = async () => {
             "countries",
             [
                 (props) => props?.GID_0,
-                (props) => props?.gid_0,
-                (props) => props?.ISO_A3,
-                (props) => props?.iso_a3,
+                                                 (props) => props?.gid_0,
+                                                 (props) => props?.ISO_A3,
+                                                 (props) => props?.iso_a3,
             ],
         );
     }
@@ -455,7 +455,7 @@ const focusMapOnBounds = (mapRef, bounds) => {
 };
 
 const filterPlannedActions = (actions) =>
-    normalizeActions(actions).filter((action) => action.status === "planned");
+normalizeActions(actions).filter((action) => action.status === "planned");
 
 const buildTurnRecord = ({ entry, index, history, eventLookup, game, lookups }) => {
     if (!entry) {
@@ -463,12 +463,12 @@ const buildTurnRecord = ({ entry, index, history, eventLookup, game, lookups }) 
     }
 
     const fallbackStartDate =
-        entry.fromDate ||
-        history[index + 1]?.toDate ||
-        history[index + 1]?.date ||
-        game?.startDate ||
-        entry.toDate ||
-        entry.date;
+    entry.fromDate ||
+    history[index + 1]?.toDate ||
+    history[index + 1]?.date ||
+    game?.startDate ||
+    entry.toDate ||
+    entry.date;
     const toDate = entry.toDate || entry.date || game?.gameDate || "";
     const fromDate = fallbackStartDate || toDate;
     const events = (entry.eventIds ?? []).map((eventId) => eventLookup.get(eventId)).filter(Boolean);
@@ -506,8 +506,8 @@ const buildTurnRecord = ({ entry, index, history, eventLookup, game, lookups }) 
         summary: entry.summary || "",
         tags: Array.from(tags).slice(0, 10),
         title:
-            primaryEvent?.title ||
-            (plannedActions[0]?.title ? `Turn centered on ${plannedActions[0].title}` : `Round ${entry.round || Math.max(1, (game?.round || 1) - index)}`),
+        primaryEvent?.title ||
+        (plannedActions[0]?.title ? `Turn centered on ${plannedActions[0].title}` : `Round ${entry.round || Math.max(1, (game?.round || 1) - index)}`),
         toDate,
     };
 };
@@ -535,40 +535,40 @@ const MetricPill = ({ children, icon = null, tone = "default" }) => {
 
     return (
         <span
-            style={{
-                alignItems: "center",
-                background: resolved.background,
-                border: resolved.border,
-                borderRadius: "999px",
-                color: resolved.color,
-                display: "inline-flex",
-                fontSize: "0.69rem",
-                fontWeight: 600,
-                gap: "0.32rem",
-                letterSpacing: "0.02em",
-                padding: "0.28rem 0.6rem",
-            }}
+        style={{
+            alignItems: "center",
+            background: resolved.background,
+            border: resolved.border,
+            borderRadius: "999px",
+            color: resolved.color,
+            display: "inline-flex",
+            fontSize: "0.69rem",
+            fontWeight: 600,
+            gap: "0.32rem",
+            letterSpacing: "0.02em",
+            padding: "0.28rem 0.6rem",
+        }}
         >
-            {icon}
-            <span>{children}</span>
+        {icon}
+        <span>{children}</span>
         </span>
     );
 };
 
 const TagPill = ({ children }) => (
     <span
-        style={{
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "999px",
-            color: "rgba(226,232,240,0.74)",
-            display: "inline-flex",
-            fontSize: "0.68rem",
-            fontWeight: 600,
-            padding: "0.24rem 0.55rem",
-        }}
+    style={{
+        background: "rgba(255,255,255,0.04)",
+                                   border: "1px solid rgba(255,255,255,0.08)",
+                                   borderRadius: "999px",
+                                   color: "rgba(226,228,240,0.74)",
+                                   display: "inline-flex",
+                                   fontSize: "0.68rem",
+                                   fontWeight: 600,
+                                   padding: "0.24rem 0.55rem",
+    }}
     >
-        {children}
+    {children}
     </span>
 );
 
@@ -594,81 +594,81 @@ const EventCard = ({ event, footer = null, lookups }) => {
 
     return (
         <div
-            style={{
-                background: "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03))",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "16px",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                overflow: "hidden",
-            }}
+        style={{
+            background: "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03))",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "16px",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+            overflow: "hidden",
+        }}
         >
-            <div
-                style={{
-                    alignItems: "center",
-                    background: "rgba(255,255,255,0.02)",
-                    borderBottom: "1px solid rgba(255,255,255,0.05)",
-                    display: "flex",
-                    gap: "0.45rem",
-                    justifyContent: "space-between",
-                    padding: "0.85rem 1rem 0.7rem",
-                }}
-            >
-                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
-                    <MetricPill icon={<CalendarIcon />} tone="default">
-                        {formatDate(event.date)}
-                    </MetricPill>
-                    {mapChangeCount > 0 && (
-                        <MetricPill icon={<MapIcon />} tone="accent">
-                            {mapChangeCount} map change{mapChangeCount === 1 ? "" : "s"}
-                        </MetricPill>
-                    )}
-                </div>
+        <div
+        style={{
+            alignItems: "center",
+            background: "rgba(255,255,255,0.02)",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            display: "flex",
+            gap: "0.45rem",
+            justifyContent: "space-between",
+            padding: "0.85rem 1rem 0.7rem",
+        }}
+        >
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+        <MetricPill icon={<CalendarIcon />} tone="default">
+        {formatDate(event.date)}
+        </MetricPill>
+        {mapChangeCount > 0 && (
+            <MetricPill icon={<MapIcon />} tone="accent">
+            {mapChangeCount} map change{mapChangeCount === 1 ? "" : "s"}
+            </MetricPill>
+        )}
+        </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", padding: "0.95rem 1rem 1rem" }}>
+        {tags.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+            {tags.map((tag) => (
+                <TagPill key={`${event.id}-${tag}`}>{tag}</TagPill>
+            ))}
             </div>
+        )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", padding: "0.95rem 1rem 1rem" }}>
-                {tags.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                        {tags.map((tag) => (
-                            <TagPill key={`${event.id}-${tag}`}>{tag}</TagPill>
-                        ))}
-                    </div>
-                )}
+        <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.82rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        {event.title}
+        </div>
 
-                <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.82rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                    {event.title}
-                </div>
-
-                {event.description && (
-                    <div className="timeline-markdown" style={{ color: "rgba(221,228,240,0.82)", fontSize: "0.77rem", lineHeight: "1.58" }}>
-                        <ReactMarkdown>{event.description}</ReactMarkdown>
-                    </div>
-                )}
-
-                {footer}
+        {event.description && (
+            <div className="timeline-markdown" style={{ color: "rgba(221,228,240,0.82)", fontSize: "0.77rem", lineHeight: "1.58" }}>
+            <ReactMarkdown>{event.description}</ReactMarkdown>
             </div>
+        )}
+
+        {footer}
+        </div>
         </div>
     );
 };
 
 const EmptyPanelState = ({ text }) => (
     <div
-        style={{
-            alignItems: "center",
-            background: "rgba(255,255,255,0.03)",
-            border: "1px dashed rgba(255,255,255,0.1)",
-            borderRadius: "16px",
-            color: "rgba(214,226,255,0.48)",
-            display: "flex",
-            fontSize: "0.78rem",
-            fontStyle: "italic",
-            justifyContent: "center",
-            lineHeight: "1.55",
-            minHeight: "9.5rem",
-            padding: "1.1rem",
-            textAlign: "center",
-        }}
+    style={{
+        alignItems: "center",
+        background: "rgba(255,255,255,0.03)",
+                                       border: "1px dashed rgba(255,255,255,0.1)",
+                                       borderRadius: "16px",
+                                       color: "rgba(214,226,255,0.48)",
+                                       display: "flex",
+                                       fontSize: "0.78rem",
+                                       fontStyle: "italic",
+                                       justifyContent: "center",
+                                       lineHeight: "1.55",
+                                       minHeight: "9.5rem",
+                                       padding: "1.1rem",
+                                       textAlign: "center",
+    }}
     >
-        {text}
+    {text}
     </div>
 );
 
@@ -685,81 +685,81 @@ const PanelChrome = ({
 
     return (
         <div
-            style={{
-                ...panelSurface,
-                bottom: isOpen ? "5.25rem" : "-34rem",
-                display: "flex",
-                flexDirection: "column",
-                height: `min(32.5rem, calc(100vh - ${topOffset} - 7rem))`,
-                left: "0.5rem",
-                maxHeight: `calc(100vh - ${topOffset} - 7rem)`,
-                maxWidth: "calc(100vw - 1rem)",
-                minHeight: 0,
-                opacity: isOpen ? 1 : 0,
-                pointerEvents: isOpen ? "auto" : "none",
-                transition: "bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease",
-            }}
+        style={{
+            ...panelSurface,
+            bottom: isOpen ? "4.9rem" : "-34rem",
+            display: "flex",
+            flexDirection: "column",
+            height: "calc(100vh - 33rem)",
+            left: "0.5rem",
+            maxHeight: "calc(100vh - 33rem)",
+            maxWidth: "calc(100vw - 1rem)",
+            minHeight: "10rem",
+            opacity: isOpen ? 1 : 0,
+            pointerEvents: isOpen ? "auto" : "none",
+            transition: "bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease",
+        }}
         >
-            <div
-                style={{
-                    borderBottom: hasHeaderText ? "1px solid rgba(255,255,255,0.07)" : "none",
-                    flexShrink: 0,
-                    padding: hasHeaderText ? "1rem 1.25rem 0.75rem" : "0.7rem 0.75rem 0",
-                }}
-            >
-                <div style={{ alignItems: "center", display: "flex", justifyContent: hasHeaderText ? "space-between" : "flex-end" }}>
-                    {hasHeaderText && (
-                        <div style={{ minWidth: 0 }}>
-                            {eyebrow && (
-                                <div style={{ color: "rgba(147,197,253,0.75)", fontSize: "0.64rem", fontWeight: 700, letterSpacing: "0.14em", marginBottom: "0.12rem", textTransform: "uppercase" }}>
-                                    {eyebrow}
-                                </div>
-                            )}
-                            {title && (
-                                <div style={{ color: "rgba(255,255,255,0.96)", fontSize: "1rem", fontWeight: 700 }}>
-                                    {title}
-                                </div>
-                            )}
-                            {subtitle && (
-                                <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.75rem", lineHeight: "1.45", marginTop: "0.12rem" }}>
-                                    {subtitle}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        style={{
-                            background: "none",
-                            border: "none",
-                            borderRadius: "6px",
-                            color: "rgba(255,255,255,0.5)",
-                            cursor: "pointer",
-                            display: "flex",
-                            fontSize: "1.1rem",
-                            lineHeight: 1,
-                            padding: "0.15rem 0.3rem",
-                            transition: "all 0.15s ease",
-                        }}
-                        onMouseEnter={(event) => {
-                            event.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                            event.currentTarget.style.color = "white";
-                        }}
-                        onMouseLeave={(event) => {
-                            event.currentTarget.style.background = "none";
-                            event.currentTarget.style.color = "rgba(255,255,255,0.5)";
-                        }}
-                        aria-label="Close panel"
-                    >
-                        <CloseIcon />
-                    </button>
+        <div
+        style={{
+            borderBottom: hasHeaderText ? "1px solid rgba(255,255,255,0.07)" : "none",
+            flexShrink: 0,
+            padding: hasHeaderText ? "1rem 1.25rem 0.75rem" : "0.7rem 0.75rem 0",
+        }}
+        >
+        <div style={{ alignItems: "center", display: "flex", justifyContent: hasHeaderText ? "space-between" : "flex-end" }}>
+        {hasHeaderText && (
+            <div style={{ minWidth: 0 }}>
+            {eyebrow && (
+                <div style={{ color: "rgba(147,197,253,0.75)", fontSize: "0.64rem", fontWeight: 700, letterSpacing: "0.14em", marginBottom: "0.12rem", textTransform: "uppercase" }}>
+                {eyebrow}
                 </div>
+            )}
+            {title && (
+                <div style={{ color: "rgba(255,255,255,0.96)", fontSize: "1rem", fontWeight: 700 }}>
+                {title}
+                </div>
+            )}
+            {subtitle && (
+                <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.75rem", lineHeight: "1.45", marginTop: "0.12rem" }}>
+                {subtitle}
+                </div>
+            )}
             </div>
+        )}
+        <button
+        type="button"
+        onClick={onClose}
+        style={{
+            background: "none",
+            border: "none",
+            borderRadius: "6px",
+            color: "rgba(255,255,255,0.5)",
+            cursor: "pointer",
+            display: "flex",
+            fontSize: "1.1rem",
+            lineHeight: 1,
+            padding: "0.15rem 0.3rem",
+            transition: "all 0.15s ease",
+        }}
+        onMouseEnter={(event) => {
+            event.currentTarget.style.background = "rgba(255,255,255,0.08)";
+            event.currentTarget.style.color = "white";
+        }}
+        onMouseLeave={(event) => {
+            event.currentTarget.style.background = "none";
+            event.currentTarget.style.color = "rgba(255,255,255,0.5)";
+        }}
+        aria-label="Close panel"
+        >
+        <CloseIcon />
+        </button>
+        </div>
+        </div>
 
-            <div style={{ display: "flex", flex: 1, flexDirection: "column", gap: "0.85rem", minHeight: 0, overflowY: "auto", padding: "0.95rem 1.25rem 1.25rem", scrollbarWidth: "none" }}>
-                {children}
-            </div>
+        <div style={{ display: "flex", flex: 1, flexDirection: "column", gap: "0.85rem", minHeight: 0, overflowY: "auto", padding: "0.95rem 1.25rem 1.25rem", scrollbarWidth: "none" }}>
+        {children}
+        </div>
         </div>
     );
 };
@@ -769,34 +769,34 @@ const JumpNode = ({ isLoading, opt, onJump }) => {
 
     return (
         <button
-            type="button"
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onClick={() => {
-                if (isLoading) {
-                    return;
-                }
+        type="button"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => {
+            if (isLoading) {
+                return;
+            }
 
-                onJump(opt.days);
-            }}
-            style={{
-                background: hovered ? "rgba(109,40,217,0.35)" : "rgba(109,40,217,0.15)",
-                border: hovered ? "1px solid rgba(139,92,246,0.7)" : "1px solid rgba(139,92,246,0.35)",
-                borderRadius: "10px",
-                color: "white",
-                cursor: "pointer",
-                opacity: isLoading ? 0.7 : 1,
-                outline: "none",
-                padding: "0.38rem 0",
-                textAlign: "center",
-                transition: "all 0.12s ease",
-                width: "12.5rem",
-            }}
+            onJump(opt.days);
+        }}
+        style={{
+            background: hovered ? "rgba(109,40,217,0.35)" : "rgba(109,40,217,0.15)",
+            border: hovered ? "1px solid rgba(139,92,246,0.7)" : "1px solid rgba(139,92,246,0.35)",
+            borderRadius: "10px",
+            color: "white",
+            cursor: "pointer",
+            opacity: isLoading ? 0.7 : 1,
+            outline: "none",
+            padding: "0.38rem 0",
+            textAlign: "center",
+            transition: "all 0.12s ease",
+            width: "12.5rem",
+        }}
         >
-            <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{opt.sublabel}</div>
-            <div style={{ color: "rgba(196,165,255,0.7)", fontSize: "0.7rem" }}>
-                {opt.label}
-            </div>
+        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{opt.sublabel}</div>
+        <div style={{ color: "rgba(196,165,255,0.7)", fontSize: "0.7rem" }}>
+        {opt.label}
+        </div>
         </button>
     );
 };
@@ -821,209 +821,104 @@ const TimelineSkipPanel = ({
 
     return (
         <PanelChrome
-            eyebrow=""
-            isOpen={isOpen}
-            onClose={onClose}
-            title="Timeline"
-            topOffset={topOffset}
+        eyebrow=""
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Timeline"
+        topOffset={topOffset}
         >
+        <div
+        style={{
+            alignItems: "center",
+            display: "flex",
+            flexDirection: "column",
+            gap: 0,
+        }}
+        >
+        <div
+        style={{
+            background: "rgba(109,40,217,0.2)",
+            border: "2px solid rgba(139,92,246,0.8)",
+            borderRadius: "999px",
+            color: "rgba(196,165,255,0.95)",
+            fontSize: "0.7rem",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            padding: "0.35rem 0",
+            textAlign: "center",
+            width: "5.5rem",
+        }}
+        >
+        {dayjs(currentDate).format("M/D/YYYY")}
+        </div>
+
+        {jumpOptions.map((opt) => (
+            <React.Fragment key={opt.label}>
+            <div style={{ background: "rgba(139,92,246,0.4)", height: "1.25rem", width: "2px" }} />
+            <JumpNode isLoading={isLoading} opt={opt} onJump={onJump} />
+            </React.Fragment>
+        ))}
+
+        <div style={{ background: "rgba(139,92,246,0.4)", height: "1.25rem", width: "2px" }} />
+        <button
+        type="button"
+        onClick={() => {
+            if (isLoading) {
+                return;
+            }
+
+            onAutoJump();
+        }}
+        style={{
+            background: "rgba(37,99,235,0.2)",
+            border: "1px solid rgba(96,165,250,0.45)",
+            borderRadius: "12px",
+            color: "white",
+            cursor: "pointer",
+            opacity: isLoading ? 0.72 : 1,
+            padding: "0.55rem 0.7rem",
+            textAlign: "center",
+            width: "12.5rem",
+        }}
+        >
+        <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>Auto-jump</div>
+        </button>
+        </div>
+
+        {isLoading && (
             <div
-                style={{
-                    alignItems: "center",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 0,
-                }}
+            style={{
+                alignItems: "center",
+                background: "rgba(255,255,255,0.04)",
+                       border: "1px solid rgba(255,255,255,0.08)",
+                       borderRadius: "12px",
+                       color: "rgba(255,255,255,0.75)",
+                       display: "flex",
+                       fontSize: "0.76rem",
+                       gap: "0.55rem",
+                       justifyContent: "center",
+                       padding: "0.68rem 0.8rem",
+            }}
             >
-                <div
-                    style={{
-                        background: "rgba(109,40,217,0.2)",
-                        border: "2px solid rgba(139,92,246,0.8)",
-                        borderRadius: "999px",
-                        color: "rgba(196,165,255,0.95)",
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.04em",
-                        padding: "0.35rem 0",
-                        textAlign: "center",
-                        width: "5.5rem",
-                    }}
-                >
-                    {dayjs(currentDate).format("M/D/YYYY")}
-                </div>
-
-                {jumpOptions.map((opt) => (
-                    <React.Fragment key={opt.label}>
-                        <div style={{ background: "rgba(139,92,246,0.4)", height: "1.25rem", width: "2px" }} />
-                        <JumpNode isLoading={isLoading} opt={opt} onJump={onJump} />
-                    </React.Fragment>
-                ))}
-
-                <div style={{ background: "rgba(139,92,246,0.4)", height: "1.25rem", width: "2px" }} />
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (isLoading) {
-                            return;
-                        }
-
-                        onAutoJump();
-                    }}
-                    style={{
-                        background: "rgba(37,99,235,0.2)",
-                        border: "1px solid rgba(96,165,250,0.45)",
-                        borderRadius: "12px",
-                        color: "white",
-                        cursor: "pointer",
-                        opacity: isLoading ? 0.72 : 1,
-                        padding: "0.55rem 0.7rem",
-                        textAlign: "center",
-                        width: "12.5rem",
-                    }}
-                >
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>Auto-jump</div>
-                </button>
+            <SpinnerRing size={15} />
             </div>
+        )}
 
-            {isLoading && (
-                <div
-                    style={{
-                        alignItems: "center",
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        borderRadius: "12px",
-                        color: "rgba(255,255,255,0.75)",
-                        display: "flex",
-                        fontSize: "0.76rem",
-                        gap: "0.55rem",
-                        justifyContent: "center",
-                        padding: "0.68rem 0.8rem",
-                    }}
-                >
-                    <SpinnerRing size={15} />
-                </div>
-            )}
-
-            {error && (
-                <div
-                    style={{
-                        background: "rgba(127,29,29,0.24)",
-                        border: "1px solid rgba(248,113,113,0.3)",
-                        borderRadius: "16px",
-                        color: "#fecaca",
-                        fontSize: "0.76rem",
-                        lineHeight: "1.5",
-                        padding: "0.85rem 0.9rem",
-                    }}
-                >
-                    {error}
-                </div>
-            )}
-
-        </PanelChrome>
-    );
-};
-
-// eslint-disable-next-line no-unused-vars
-const TimelineHistoryPanelLegacy = ({
-    isOpen,
-    onFocusEvent,
-    onRevealNextEvent,
-    lookups,
-    onClose,
-    record,
-    topOffset,
-    visibleEventCount,
-}) => {
-    const totalEvents = record?.events?.length || 0;
-    const visibleEvents =
-        totalEvents > 0
-            ? record.events.slice(0, Math.min(visibleEventCount, totalEvents))
-            : [];
-    const lastVisibleEventRef = React.useRef(null);
-
-    useEffect(() => {
-        if (!isOpen || !lastVisibleEventRef.current) {
-            return;
-        }
-
-        lastVisibleEventRef.current.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-        });
-    }, [isOpen, record?.id, visibleEvents.length]);
-
-    return (
-        <PanelChrome
-            eyebrow=""
-            isOpen={isOpen}
-            onClose={onClose}
-            title="Events"
-            subtitle=""
-            topOffset={topOffset}
-        >
-            {!record ? (
-                <EmptyPanelState text="No event chain is available yet." />
-            ) : totalEvents === 0 ? (
-                <EmptyPanelState text="No world events were recorded for this time skip." />
-            ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                    {visibleEvents.map((event, index) => {
-                        const isLastVisible = index === visibleEvents.length - 1;
-                        const hasMoreEvents = isLastVisible && visibleEvents.length < totalEvents;
-                        const hasMapChanges = getEventMapChangeCount(event) > 0;
-
-                        return (
-                            <div key={event.id} ref={isLastVisible ? lastVisibleEventRef : null}>
-                                <EventCard
-                                    event={event}
-                                    lookups={lookups}
-                                    footer={(
-                                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", marginTop: "0.2rem" }}>
-                                            {hasMapChanges && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onFocusEvent(event)}
-                                                    style={{
-                                                        background: "rgba(96,165,250,0.12)",
-                                                        border: "1px solid rgba(96,165,250,0.24)",
-                                                        borderRadius: "10px",
-                                                        color: "#bfdbfe",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.74rem",
-                                                        fontWeight: 600,
-                                                        padding: "0.48rem 0.72rem",
-                                                    }}
-                                                >
-                                                    Show on map
-                                                </button>
-                                            )}
-                                            {hasMoreEvents && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onRevealNextEvent()}
-                                                    style={{
-                                                        background: "rgba(255,255,255,0.06)",
-                                                        border: "1px solid rgba(255,255,255,0.12)",
-                                                        borderRadius: "10px",
-                                                        color: "rgba(255,255,255,0.88)",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.74rem",
-                                                        fontWeight: 600,
-                                                        padding: "0.48rem 0.72rem",
-                                                    }}
-                                                >
-                                                    Next event
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                />
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+        {error && (
+            <div
+            style={{
+                background: "rgba(127,29,29,0.24)",
+                   border: "1px solid rgba(248,113,113,0.3)",
+                   borderRadius: "16px",
+                   color: "#fecaca",
+                   fontSize: "0.76rem",
+                   lineHeight: "1.5",
+                   padding: "0.85rem 0.9rem",
+            }}
+            >
+            {error}
+            </div>
+        )}
         </PanelChrome>
     );
 };
@@ -1040,9 +935,9 @@ const TimelineHistoryPanel = ({
 }) => {
     const totalEvents = record?.events?.length || 0;
     const visibleEvents =
-        totalEvents > 0
-            ? record.events.slice(0, Math.min(visibleEventCount, totalEvents))
-            : [];
+    totalEvents > 0
+    ? record.events.slice(0, Math.min(visibleEventCount, totalEvents))
+    : [];
     const hasMoreEvents = visibleEvents.length < totalEvents;
     const lastVisibleEventRef = React.useRef(null);
 
@@ -1059,65 +954,65 @@ const TimelineHistoryPanel = ({
 
     return (
         <PanelChrome
-            eyebrow=""
-            isOpen={isOpen}
-            onClose={onClose}
-            subtitle={record?.rangeLabel || ""}
-            title="Events"
-            topOffset={topOffset}
+        eyebrow=""
+        isOpen={isOpen}
+        onClose={onClose}
+        subtitle={record?.rangeLabel || ""}
+        title="Events"
+        topOffset={topOffset}
         >
-            {!record ? (
-                <EmptyPanelState text="No event chain is available yet." />
-            ) : totalEvents === 0 ? (
-                <EmptyPanelState text="No world events were recorded for this time skip." />
-            ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                    {visibleEvents.map((event, index) => {
-                        const isLastVisible = index === visibleEvents.length - 1;
-                        const hasMapChanges = getEventMapChangeCount(event) > 0;
+        {!record ? (
+            <EmptyPanelState text="No event chain is available yet." />
+        ) : totalEvents === 0 ? (
+            <EmptyPanelState text="No world events were recorded for this time skip." />
+        ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {visibleEvents.map((event, index) => {
+                const isLastVisible = index === visibleEvents.length - 1;
+                const hasMapChanges = getEventMapChangeCount(event) > 0;
 
-                        return (
-                            <div key={event.id} ref={isLastVisible ? lastVisibleEventRef : null}>
-                                <EventCard
-                                    event={event}
-                                    lookups={lookups}
-                                    footer={(
-                                        hasMapChanges ? (
-                                            <div style={{ display: "flex", justifyContent: "center", marginTop: "0.15rem" }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onFocusEvent(event)}
-                                                    style={{
-                                                        ...ghostButtonStyle,
-                                                        color: "#bfdbfe",
-                                                    }}
-                                                >
-                                                    <MapIcon />
-                                                    <span>Show on map</span>
-                                                </button>
-                                            </div>
-                                        ) : null
-                                    )}
-                                />
-                            </div>
-                        );
-                    })}
-                    {hasMoreEvents && (
-                        <button
+                return (
+                    <div key={event.id} ref={isLastVisible ? lastVisibleEventRef : null}>
+                    <EventCard
+                    event={event}
+                    lookups={lookups}
+                    footer={(
+                        hasMapChanges ? (
+                            <div style={{ display: "flex", justifyContent: "center", marginTop: "0.15rem" }}>
+                            <button
                             type="button"
-                            onClick={() => onRevealNextEvent()}
+                            onClick={() => onFocusEvent(event)}
                             style={{
                                 ...ghostButtonStyle,
-                                minHeight: "2.5rem",
-                                width: "100%",
+                                color: "#bfdbfe",
                             }}
-                        >
-                            <ChevronDownIcon />
-                            <span>Next event</span>
-                        </button>
+                            >
+                            <MapIcon />
+                            <span>Show on map</span>
+                            </button>
+                            </div>
+                        ) : null
                     )}
-                </div>
+                    />
+                    </div>
+                );
+            })}
+            {hasMoreEvents && (
+                <button
+                type="button"
+                onClick={() => onRevealNextEvent()}
+                style={{
+                    ...ghostButtonStyle,
+                    minHeight: "2.5rem",
+                    width: "100%",
+                }}
+                >
+                <ChevronDownIcon />
+                <span>Next event</span>
+                </button>
             )}
+            </div>
+        )}
         </PanelChrome>
     );
 };
@@ -1154,9 +1049,9 @@ const DateWidget = ({
             try {
                 const [countries, regions, nextCountryBounds, nextRegionBounds] = await Promise.all([
                     loadCountryNames(),
-                    loadRegionCatalog(),
-                    loadCountryBounds(),
-                    loadRegionBounds(),
+                                                                                                    loadRegionCatalog(),
+                                                                                                    loadCountryBounds(),
+                                                                                                    loadRegionBounds(),
                 ]);
 
                 if (cancelled) {
@@ -1188,8 +1083,8 @@ const DateWidget = ({
             try {
                 const [game, nextEvents, world] = await Promise.all([
                     readGameData({ force: true }),
-                    readEventsState({ force: true }),
-                    readWorldState({ force: true }),
+                                                                    readEventsState({ force: true }),
+                                                                    readWorldState({ force: true }),
                 ]);
 
                 if (cancelled) {
@@ -1248,8 +1143,8 @@ const DateWidget = ({
 
         try {
             const result = mode === "auto"
-                ? await simulateAutoJump({ days })
-                : await simulateTimelineJump({ days });
+            ? await simulateAutoJump({ days })
+            : await simulateTimelineJump({ days });
             setGameData(result.game);
             setEvents(result.events);
             setWorldState(result.world);
@@ -1269,27 +1164,27 @@ const DateWidget = ({
     const historyRecords = useMemo(() => {
         const rawHistory = worldState?.simulationHistory ?? [];
         return rawHistory
-            .map((entry, index) => buildTurnRecord({
-                entry,
-                index,
-                history: rawHistory,
-                eventLookup,
-                game: gameData,
-                lookups,
-            }))
-            .filter(Boolean);
+        .map((entry, index) => buildTurnRecord({
+            entry,
+            index,
+            history: rawHistory,
+            eventLookup,
+            game: gameData,
+            lookups,
+        }))
+        .filter(Boolean);
     }, [eventLookup, gameData, lookups, worldState]);
 
     const latestTurnRecord = historyRecords[0] || null;
     const totalVisibleEvents = latestTurnRecord?.events?.length || 0;
     const activeVisibleEvent =
-        openPanel === "history" && totalVisibleEvents > 0
-            ? latestTurnRecord.events[Math.min(Math.max(visibleEventCount, 1), totalVisibleEvents) - 1]
-            : null;
+    openPanel === "history" && totalVisibleEvents > 0
+    ? latestTurnRecord.events[Math.min(Math.max(visibleEventCount, 1), totalVisibleEvents) - 1]
+    : null;
 
     const displayDate = gameData
-        ? dayjs(gameData.gameDate).format("MMMM Do, YYYY")
-        : "Loading...";
+    ? dayjs(gameData.gameDate).format("MMMM Do, YYYY")
+    : "Loading...";
     const currentDate = gameData?.gameDate ?? dayjs().format("YYYY-MM-DD");
 
     useEffect(() => {
@@ -1322,89 +1217,89 @@ const DateWidget = ({
 
     return (
         <>
-            <TimelineSkipPanel
-                currentDate={currentDate}
-                error={error}
-                isLoading={isLoading}
-                isOpen={openPanel === "skip"}
-                onAutoJump={() => runJump(365, "auto")}
-                onClose={() => setPanel(null)}
-                onJump={(days) => runJump(days, "jump")}
-                topOffset={topOffset}
-            />
-            <TimelineHistoryPanel
-                isOpen={openPanel === "history"}
-                onFocusEvent={focusEvent}
-                onRevealNextEvent={revealNextEvent}
-                lookups={lookups}
-                onClose={() => setPanel(null)}
-                record={latestTurnRecord}
-                topOffset={topOffset}
-                visibleEventCount={visibleEventCount}
-            />
+        <TimelineSkipPanel
+        currentDate={currentDate}
+        error={error}
+        isLoading={isLoading}
+        isOpen={openPanel === "skip"}
+        onAutoJump={() => runJump(365, "auto")}
+        onClose={() => setPanel(null)}
+        onJump={(days) => runJump(days, "jump")}
+        topOffset={topOffset}
+        />
+        <TimelineHistoryPanel
+        isOpen={openPanel === "history"}
+        onFocusEvent={focusEvent}
+        onRevealNextEvent={revealNextEvent}
+        lookups={lookups}
+        onClose={() => setPanel(null)}
+        record={latestTurnRecord}
+        topOffset={topOffset}
+        visibleEventCount={visibleEventCount}
+        />
 
-            <div
-                style={{
-                    ...widgetSurface,
-                    right: rightShift,
-                    top: topOffset,
-                }}
-            >
-                <button
-                    type="button"
-                    style={{
-                        ...buttonStyle,
-                        color: openPanel === "history" ? "#bfdbfe" : buttonStyle.color,
-                    }}
-                    onClick={() => togglePanel("history")}
-                    onMouseEnter={(event) => {
-                        if (openPanel !== "history") {
-                            event.currentTarget.style.color = "white";
-                        }
-                    }}
-                    onMouseLeave={(event) => {
-                        if (openPanel !== "history") {
-                            event.currentTarget.style.color = buttonStyle.color;
-                        }
-                    }}
-                >
-                    {"\u00AB"}
-                </button>
+        <div
+        style={{
+            ...widgetSurface,
+            right: rightShift,
+            top: topOffset,
+        }}
+        >
+        <button
+        type="button"
+        style={{
+            ...buttonStyle,
+            color: openPanel === "history" ? "#bfdbfe" : buttonStyle.color,
+        }}
+        onClick={() => togglePanel("history")}
+        onMouseEnter={(event) => {
+            if (openPanel !== "history") {
+                event.currentTarget.style.color = "white";
+            }
+        }}
+        onMouseLeave={(event) => {
+            if (openPanel !== "history") {
+                event.currentTarget.style.color = buttonStyle.color;
+            }
+        }}
+        >
+        {"\u00AB"}
+        </button>
 
-                <div style={{ alignItems: "center", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
-                    <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.95rem", letterSpacing: "0.02em" }}>
-                        {displayDate}
-                    </div>
-                </div>
+        <div style={{ alignItems: "center", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
+        <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.95rem", letterSpacing: "0.02em" }}>
+        {displayDate}
+        </div>
+        </div>
 
-                <button
-                    type="button"
-                    style={{
-                        ...buttonStyle,
-                        color: openPanel === "skip" ? "rgba(196,165,255,0.9)" : buttonStyle.color,
-                    }}
-                    onClick={() => {
-                        if (isLoading) {
-                            setPanel("skip");
-                            return;
-                        }
+        <button
+        type="button"
+        style={{
+            ...buttonStyle,
+            color: openPanel === "skip" ? "rgba(196,165,255,0.9)" : buttonStyle.color,
+        }}
+        onClick={() => {
+            if (isLoading) {
+                setPanel("skip");
+                return;
+            }
 
-                        togglePanel("skip");
-                    }}
-                    onMouseEnter={(event) => {
-                        if (openPanel !== "skip") {
-                            event.currentTarget.style.color = "white";
-                        }
-                    }}
-                    onMouseLeave={(event) => {
-                        if (openPanel !== "skip") {
-                            event.currentTarget.style.color = buttonStyle.color;
-                        }
-                    }}
-                >
-                    {isLoading ? <SpinnerRing size={15} tone="rgba(196,165,255,0.95)" /> : "\u00BB"}
-                </button>
-            </div>
+            togglePanel("skip");
+        }}
+        onMouseEnter={(event) => {
+            if (openPanel !== "skip") {
+                event.currentTarget.style.color = "white";
+            }
+        }}
+        onMouseLeave={(event) => {
+            if (openPanel !== "skip") {
+                event.currentTarget.style.color = buttonStyle.color;
+            }
+        }}
+        >
+        {isLoading ? <SpinnerRing size={15} tone="rgba(196,165,255,0.95)" /> : "\u00BB"}
+        </button>
+        </div>
         </>
     );
 };
