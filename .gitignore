@@ -11,7 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
-server/data
+server/data/*
+!server/data/scenarios/
 .key
 
 # Editor directories and files
