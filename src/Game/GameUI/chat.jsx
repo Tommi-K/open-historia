@@ -11,6 +11,7 @@ import {
     readJson,
     writeJson,
 } from "../../runtime/assets.js";
+import { flagEmojiFromGid } from "../../runtime/countryFlags.js";
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
@@ -32,101 +33,26 @@ const loadCountryNames = async () => {
     return loadCachedCountryNames();
 };
 
-// ── Flag cache ────────────────────────────────────────────────────────────────
+// ── Flags ─────────────────────────────────────────────────────────────────────
+// Flag emoji are derived locally from each nation's GID_0 country code. (The
+// previous source, restcountries.com, deprecated its public API and no longer
+// returns flag data.)
 
-const flagCache = new Map();
+const FALLBACK_FLAG = "🏳";
 
-const fetchFlagByCode = async (code) => {
-    const res = await fetch(`https://restcountries.com/v3.1/alpha/${encodeURIComponent(code)}?fields=flag`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return (Array.isArray(data) ? data[0] : data)?.flag ?? "🏳";
-};
+const getCountryFlag = ({ code } = {}) => flagEmojiFromGid(code) ?? FALLBACK_FLAG;
 
-const fetchFlagByName = async (name) => {
-    const res = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(name)}?fullText=true&fields=flag`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return data?.[0]?.flag ?? "🏳";
-};
-
-const getCountryFlag = async ({ code, name } = {}) => {
-    const key = code || name;
-    if (!key) return "🏳";
-    if (flagCache.has(key) && flagCache.get(key) !== "🏳") return flagCache.get(key);
-    if (!flagCache.has(key)) flagCache.set(key, "🏳");
-    try {
-        const emoji = code ? await fetchFlagByCode(code) : await fetchFlagByName(name);
-        flagCache.set(key, emoji);
-        return emoji;
-    } catch {
-        if (code && name) {
-            try {
-                const emoji = await fetchFlagByName(name);
-                flagCache.set(key, emoji);
-                return emoji;
-            } catch { /* fall through */ }
-        }
-        flagCache.set(key, "🏳");
-        return "🏳";
-    }
-};
-
-const useCountryFlag = ({ code, name } = {}) => {
-    const key = code || name;
-    const [flag, setFlag] = useState(() => (key && flagCache.has(key)) ? flagCache.get(key) : "🏳");
-    useEffect(() => {
-        if (!key) return;
-        if (flagCache.has(key) && flagCache.get(key) !== "🏳") { setFlag(flagCache.get(key)); return; }
-        let cancelled = false;
-        getCountryFlag({ code, name }).then(emoji => { if (!cancelled) setFlag(emoji); });
-        return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [key]);
-    return flag;
-};
+const useCountryFlag = ({ code } = {}) =>
+    useMemo(() => getCountryFlag({ code }), [code]);
 
 const useCountryFlags = (countries) => {
-    const depsKey = countries.map(c => c.code || c.name).join(",");
-
-    const [flags, setFlags] = useState(() => {
-        const initial = {};
-        for (const { name, code } of countries) {
-            const key = code || name;
-            initial[name] = (key && flagCache.has(key) && flagCache.get(key) !== "🏳")
-            ? flagCache.get(key)
-            : "🏳";
-        }
-        return initial;
-    });
-
-    useEffect(() => {
-        if (!countries.length) return;
-        let cancelled = false;
-
-        setFlags(prev => {
-            const next = { ...prev };
-            for (const { name, code } of countries) {
-                const key = code || name;
-                if (key && flagCache.has(key)) next[name] = flagCache.get(key);
-                else next[name] = prev[name] ?? "🏳";
-            }
-            return next;
-        });
-
-        for (const { name, code } of countries) {
-            const key = code || name;
-            if (flagCache.has(key) && flagCache.get(key) !== "🏳") continue;
-            getCountryFlag({ code, name }).then(emoji => {
-                if (!cancelled) setFlags(prev => ({ ...prev, [name]: emoji }));
-            });
-        }
-
-        return () => { cancelled = true; };
+    const depsKey = countries.map(c => `${c.name}:${c.code ?? ""}`).join(",");
+    return useMemo(() => {
+        const flags = {};
+        for (const { name, code } of countries) flags[name] = getCountryFlag({ code });
+        return flags;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [depsKey]);
-
-    return flags;
 };
 
 // ── Nation colors (from colors.json, same source as WorldMap) ─────────────────

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
 import { resolveCountryDisplayName } from "../../runtime/assets.js";
+import { flagImageUrlFromGid, flagEmojiFromGid } from "../../runtime/countryFlags.js";
 
 let _setSelection = null;
 let _currentSelection = null;
@@ -28,62 +29,17 @@ export const onOceanClicked = () => {
     if (_currentSelection) _dismiss?.();
 };
 
-const flagCache = {}; // GID_0 or country name -> { imageUrl, emoji } | null
-
 const createFlagState = (status = "idle", imageUrl = null, emoji = null) => ({
     status,
     imageUrl,
     emoji,
 });
 
-const normalizeFlagPayload = (payload) => {
-    const data = Array.isArray(payload) ? payload[0] : payload;
-    const imageUrl = data?.flags?.svg ?? data?.flags?.png ?? null;
-    const emoji = data?.flag ?? null;
-
-    if (!imageUrl && !emoji) return null;
-    return { imageUrl, emoji };
-};
-
-const fetchFlagPayload = async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return normalizeFlagPayload(await res.json());
-};
-
-const fetchFlagInfo = async (gid0, countryName) => {
-    const cacheKey = (gid0 || countryName || "").trim().toUpperCase();
-    if (!cacheKey) return null;
-    if (cacheKey in flagCache) return flagCache[cacheKey];
-
-    try {
-        if (gid0) {
-            const alphaMatch = await fetchFlagPayload(
-                `https://restcountries.com/v3.1/alpha/${encodeURIComponent(gid0)}?fields=flags,flag`
-            );
-            if (alphaMatch) {
-                flagCache[cacheKey] = alphaMatch;
-                return alphaMatch;
-            }
-        }
-    } catch {
-        // Fall back to country name below.
-    }
-
-    try {
-        if (countryName) {
-            const nameMatch = await fetchFlagPayload(
-                `https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}?fullText=true&fields=flags,flag`
-            );
-            flagCache[cacheKey] = nameMatch;
-            return nameMatch;
-        }
-    } catch {
-        // Fall through to null cache below.
-    }
-
-    flagCache[cacheKey] = null;
-    return null;
+// Flag image (with an emoji fallback) for a selected region's GID_0 country code.
+const resolveFlagInfo = (gid0) => {
+    const imageUrl = flagImageUrlFromGid(gid0);
+    if (!imageUrl) return null;
+    return { imageUrl, emoji: flagEmojiFromGid(gid0) };
 };
 
 const IconBtn = ({ children, title, onClick }) => {
@@ -171,24 +127,14 @@ const RegionPopup = () => {
             return;
         }
 
-        let cancelled = false;
-        setFlagState(createFlagState("loading"));
         setFlagImageFailed(false);
 
-        fetchFlagInfo(selection.GID_0, selection.COUNTRY).then((flagInfo) => {
-            if (cancelled) return;
-
-            if (!flagInfo) {
-                setFlagState(createFlagState("error"));
-                return;
-            }
-
-            setFlagState(createFlagState("ready", flagInfo.imageUrl, flagInfo.emoji));
-        });
-
-        return () => {
-            cancelled = true;
-        };
+        const flagInfo = resolveFlagInfo(selection.GID_0);
+        setFlagState(
+            flagInfo
+                ? createFlagState("ready", flagInfo.imageUrl, flagInfo.emoji)
+                : createFlagState("error"),
+        );
     }, [selection?.COUNTRY, selection?.GID_0]);
 
     useEffect(() => {
