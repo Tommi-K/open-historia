@@ -46,6 +46,9 @@ const parsePost = (issue) => {
     url: issue.html_url,
     createdAt: issue.created_at,
     pinned: (issue.labels ?? []).some((label) => (label.name ?? label) === "pinned"),
+    // Verified against GitHub's author_association — only posts actually made by
+    // the hub owner count. Writing "official" in a title does nothing.
+    official: issue.author_association === "OWNER",
     upvotes: issue.reactions?.["+1"] ?? 0,
     plays: issue.reactions?.rocket ?? 0,
     comments: issue.comments ?? 0,
@@ -131,10 +134,28 @@ const ScenarioCard = ({ post, busy, onImport }) => (
         <img src={post.avatarUrl} alt={post.author} style={{ borderRadius: "50%", height: "1.6rem", width: "1.6rem" }} />
       )}
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: "0.95rem", fontWeight: 800, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div
+          title={post.official ? "Official: posted by the hub owner (verified by GitHub, not by the title)" : undefined}
+          style={{
+            // Purple = verified official (hub-owner post). A random poster writing
+            // "official" in their title stays white.
+            color: post.official ? "#c4b5fd" : "#fff",
+            fontSize: "0.95rem",
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {post.pinned ? "📌 " : ""}{post.title}
         </div>
         <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.7rem" }}>
+          {post.official && (
+            <span style={{ background: "rgba(124,58,237,0.25)", border: "1px solid rgba(167,139,250,0.45)", borderRadius: "999px", color: "#c4b5fd", fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em", marginRight: "0.35rem", padding: "0.08rem 0.4rem", textTransform: "uppercase" }}>
+              ✓ Official
+            </span>
+          )}
           by {post.author} · {new Date(post.createdAt).toLocaleDateString()}
         </div>
       </div>
@@ -268,6 +289,7 @@ const CommunityPanel = ({ onImported }) => {
       <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.9rem" }}>
         <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.78rem" }}>
           Community scenarios from the hub — 🚀 = played it, 👍 = liked it (react on the post to vote).
+          {" "}<span style={{ color: "#c4b5fd" }}>Purple = verified official post.</span>
         </div>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => load(true)} style={pillButton}>Refresh</button>
