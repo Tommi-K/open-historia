@@ -3975,5 +3975,13 @@
     "ZMB",
     "ZNC",
     "ZWE"
+  ],
+  "allowedUnitTypes": [
+    "infantry",
+    "armor",
+    "air",
+    "naval",
+    "artillery",
+    "garrison"
   ]
 }
