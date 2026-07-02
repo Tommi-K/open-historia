@@ -1,3 +1,4 @@
+/*! Open Historia — portions (reasoning toggle + small-screen menu) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useEffect, useState } from "react";
 import {
     DEFAULT_PROVIDER,
@@ -7,6 +8,11 @@ import {
     providerSupportsModelDiscovery,
     setReasoningEnabled,
 } from "../AI/providerConfig.js";
+import {
+    getLanguageOptions,
+    getStoredLanguage,
+    setStoredLanguage,
+} from "../../runtime/i18n.js";
 
 const baseStyle = {
     position: "fixed",
@@ -86,6 +92,61 @@ function groupProviders(options) {
 
     return groups;
 }
+
+const LanguageSelector = () => {
+    const [query, setQuery] = useState("");
+    const [saving, setSaving] = useState(false);
+    const current = getStoredLanguage();
+    const options = getLanguageOptions();
+    const normalizedQuery = query.trim().toLowerCase();
+    const filtered = normalizedQuery
+        ? options.filter((option) =>
+            `${option.name} ${option.native} ${option.code}`.toLowerCase().includes(normalizedQuery))
+        : options;
+
+    const applyLanguage = async (code) => {
+        if (!code || code === current || saving) {
+            return;
+        }
+
+        setSaving(true);
+        // Saves on the server too, so the phone app follows the same choice.
+        await setStoredLanguage(code);
+        // Reload so the translator starts (or stops) cleanly and every
+        // already-rendered string goes through it from scratch.
+        window.location.reload();
+    };
+
+    return (
+        <div style={fieldGroupStyle}>
+        <label style={labelStyle}>Language</label>
+        <input
+        style={{ ...inputStyle, marginBottom: "0.4rem" }}
+        type="text"
+        value={query}
+        placeholder="Search languages..."
+        onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+        data-no-translate
+        value={filtered.some((option) => option.code === current) ? current : ""}
+        onChange={(event) => applyLanguage(event.target.value)}
+        style={{ ...inputStyle, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
+        >
+        {!filtered.some((option) => option.code === current) && (
+            <option value="" disabled>
+            {filtered.length ? `${filtered.length} matches — pick one` : "No matching language"}
+            </option>
+        )}
+        {filtered.map((option) => (
+            <option key={option.code} value={option.code} style={{ color: "black" }}>
+            {option.name}{option.native && option.native !== option.name ? ` — ${option.native}` : ""}
+            </option>
+        ))}
+        </select>
+        </div>
+    );
+};
 
 const Toggle = ({ label, enabled, onToggle }) => (
     <div
@@ -546,6 +607,7 @@ const SettingsMenu = ({
     onApiProviderChange,
     providerSettings,
     onProviderSettingChange,
+    onOpenCheats,
     discordUrl,
     githubUrl,
 }) => {
@@ -593,9 +655,36 @@ const SettingsMenu = ({
         onSettingChange={onProviderSettingChange ?? (() => {})}
         />
 
+        <LanguageSelector />
+
         <Toggle label="Fullscreen" enabled={isFullscreenEnabled} onToggle={onToggleFullscreen} />
         <Toggle label="3D Globe" enabled={isGlobeEnabled} onToggle={onToggleGlobe} />
         <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
+
+        {typeof onOpenCheats === "function" && (
+            <button
+            type="button"
+            onClick={onOpenCheats}
+            style={{
+                alignItems: "center",
+                background: "rgba(124,58,237,0.22)",
+                border: "1px solid rgba(139,92,246,0.45)",
+                borderRadius: "8px",
+                color: "white",
+                cursor: "pointer",
+                display: "flex",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                gap: "0.5rem",
+                justifyContent: "center",
+                marginBottom: "1rem",
+                padding: "0.6rem 0.7rem",
+                width: "100%",
+            }}
+            >
+            🧪 Cheats
+            </button>
+        )}
 
         <SocialLinks discordUrl={discordUrl} githubUrl={githubUrl} />
         </div>

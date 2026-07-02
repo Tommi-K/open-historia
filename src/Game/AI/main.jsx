@@ -1,3 +1,4 @@
+/*! Open Historia — portions (server relay for OpenAI-style APIs + reasoning toggle) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import {
     getProviderSettings,
     getReasoningEnabled,
@@ -6,6 +7,8 @@ import {
     setProviderField,
 } from "./providerConfig.js";
 import { JSON_URLS, readJson } from "../../runtime/assets.js";
+import { languageDirective } from "../../runtime/i18n.js";
+import { difficultyDirective } from "../../runtime/difficulty.js";
 import { normalizePromptPack } from "./gameplayPrompts.js";
 import {
     buildActionDisplayText,
@@ -457,6 +460,13 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
 }
 
 export async function callAI(systemPrompt, history, opts) {
+    // Non-English players get replies in their language at the source —
+    // native answers beat post-translating them (see runtime/i18n.js).
+    const directive = languageDirective();
+    if (directive) {
+        systemPrompt = `${systemPrompt}\n\n${directive}`;
+    }
+
     switch (getStoredProvider()) {
     case "openai":
         return callOpenAI(systemPrompt, history, opts);
@@ -715,7 +725,8 @@ export async function buildDiplomaticSystemPrompt(countries, playerCountry) {
     };
     const helperValues = resolveHelperValues(promptPack.helpers, variables);
 
-    return renderTemplate(promptPack.leader, { ...variables, ...helperValues });
+    // Leaders negotiate as softly or ruthlessly as the chosen difficulty.
+    return `${renderTemplate(promptPack.leader, { ...variables, ...helperValues })}\n\n${difficultyDirective(gameData?.difficulty)}`;
 }
 
 let advisorHistory = [];

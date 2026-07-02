@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Open Historia — Linux/Termux updater © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE).
+
 # ============================================================
 #  Open Historia - one-click updater (Linux / macOS)
 #  ----------------------------------------------------------

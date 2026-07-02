@@ -1,4 +1,6 @@
 @echo off
+REM Open Historia — Windows updater © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE).
+
 setlocal EnableExtensions EnableDelayedExpansion
 title Open Historia - Updater
 

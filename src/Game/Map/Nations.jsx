@@ -1,4 +1,4 @@
-/*! Pax Historia — portions (custom-regions tier-2 rendering) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+/*! Open Historia — portions (custom-regions tier-2 rendering) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import { onRegionSelected, dismissRegionPopup } from "../Selection/Regions";
@@ -19,6 +19,7 @@ import {
   resolveCountryDisplayName,
 } from "../../runtime/assets.js";
 import { loadCountryLabelCollections } from "../../runtime/countryLabels.js";
+import { translateLabel } from "../../runtime/translator.js";
 
 ensurePmtilesProtocol();
 const EMPTY_FEATURE_COLLECTION = { type: "FeatureCollection", features: [] };
@@ -251,6 +252,15 @@ const WorldMap = () => {
   }, [customRegionData]);
   const ownedCodesKey = useMemo(() => [...ownedCountryCodes].sort().join(","), [ownedCountryCodes]);
 
+  // Bumped when the translator learns new strings, so labels rebuild with
+  // translated names (they're baked into map features, not DOM text).
+  const [labelEpoch, setLabelEpoch] = useState(0);
+  useEffect(() => {
+    const onUpdated = () => setLabelEpoch((epoch) => epoch + 1);
+    window.addEventListener("i18n:updated", onUpdated);
+    return () => window.removeEventListener("i18n:updated", onUpdated);
+  }, []);
+
   // Owner (polity) labels for custom maps — one label per landmass-cluster per
   // owner, named by the scenario's polity registry ("Soviet Union", not "Russia").
   // Recomputed as ownership overrides poll in, so labels follow conquests.
@@ -260,9 +270,11 @@ const WorldMap = () => {
       customRegionData,
       worldState?.regionOwnershipOverrides ?? {},
       worldState?.polityOverrides ?? {},
-      resolveCountryDisplayName,
+      (raw, owner) => translateLabel(resolveCountryDisplayName(raw, owner)),
     );
-  }, [customActive, customRegionData, worldState]);
+    // labelEpoch: rebuild once new translations land.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customActive, customRegionData, worldState, labelEpoch]);
 
   // On custom maps the stock modern-country labels are replaced wholesale by the
   // owner labels (no more "Russia"/"Ukraine" floating over the Soviet Union).
@@ -393,7 +405,12 @@ const WorldMap = () => {
   useEffect(() => {
     let cancelled = false;
 
-    loadCountryLabelCollections({ ownedCodes: ownedCountryCodes.size ? ownedCountryCodes : null })
+    // labelEpoch > 0 means translations arrived after the first build: force
+    // a rebuild so baked-in label names pick them up.
+    loadCountryLabelCollections({
+      force: labelEpoch > 0,
+      ownedCodes: ownedCountryCodes.size ? ownedCountryCodes : null,
+    })
       .then(({ pointLabelData: pointLabels, curvedLabelData: curvedLabels }) => {
         if (cancelled) return;
         setPointLabelData(pointLabels);
@@ -405,7 +422,7 @@ const WorldMap = () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownedCodesKey]);
+  }, [ownedCodesKey, labelEpoch]);
 
   const fillStyle = useMemo(() => {
     const stops = Object.entries(colorMap).flatMap(([iso, rgb]) => [
