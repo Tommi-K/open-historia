@@ -3,6 +3,7 @@
   "appName": "Pax Historia",
   "webDir": "www",
   "server": {
+    "androidScheme": "http",
     "cleartext": true,
     "allowNavigation": ["*"]
   },
