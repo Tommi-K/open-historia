@@ -74,8 +74,22 @@
       <button class="ghost" id="cancel">Change server</button>
     </div>
 
+    <div class="card" id="update" style="display: none">
+      <h1>Update available</h1>
+      <p id="updateInfo">
+        A newer version of the app is downloading — install
+        <b>pax-historia.apk</b> from your notification bar when it finishes,
+        then reopen the app.
+      </p>
+      <button class="ghost" id="skipUpdate">Continue without updating</button>
+    </div>
+
     <script>
       const KEY = "pax-server-url";
+      // Stamped with the CI run number at build time; hand-built ("dev")
+      // copies skip the update check entirely.
+      const APP_BUILD = "__APP_BUILD__";
+      const RELEASE_API = "https://api.github.com/repos/Tommi-K/pax-historia/releases/tags/android";
       const setup = document.getElementById("setup");
       const connecting = document.getElementById("connecting");
       const input = document.getElementById("server");
@@ -115,31 +129,70 @@
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") connect(input.value); });
       document.getElementById("cancel").addEventListener("click", showSetup);
 
-      // A remembered server auto-connects after a short grace period.
-      const saved = localStorage.getItem(KEY);
-      if (saved) {
-        input.value = saved;
-        setup.style.display = "none";
-        connecting.style.display = "flex";
-        document.getElementById("connectingTo").textContent = "Connecting to " + saved + "…";
-        autoTimer = setTimeout(() => connect(saved), 1500);
-      } else {
-        // First launch: look for a Termux server on this phone — if it's there,
-        // go straight into the game with zero typing. Otherwise show the form.
-        const guess = "http://localhost:3000";
-        setup.style.display = "none";
-        connecting.style.display = "flex";
-        document.getElementById("connectingTo").textContent = "Looking for a server on this phone…";
-        fetch(guess + "/api/library", { signal: AbortSignal.timeout(2500) })
-          .then(() => {
-            localStorage.setItem(KEY, guess);
-            window.location.replace(guess);
-          })
-          .catch(() => {
-            showSetup();
-            errorBox.textContent = "";
+      const startNormalFlow = () => {
+        // A remembered server auto-connects after a short grace period.
+        const saved = localStorage.getItem(KEY);
+        if (saved) {
+          input.value = saved;
+          setup.style.display = "none";
+          connecting.style.display = "flex";
+          document.getElementById("connectingTo").textContent = "Connecting to " + saved + "…";
+          autoTimer = setTimeout(() => connect(saved), 1500);
+        } else {
+          // First launch: look for a Termux server on this phone — if it's
+          // there, go straight into the game with zero typing.
+          const guess = "http://localhost:3000";
+          setup.style.display = "none";
+          connecting.style.display = "flex";
+          document.getElementById("connectingTo").textContent = "Looking for a server on this phone…";
+          fetch(guess + "/api/library", { signal: AbortSignal.timeout(2500) })
+            .then(() => {
+              localStorage.setItem(KEY, guess);
+              window.location.replace(guess);
+            })
+            .catch(() => {
+              showSetup();
+              errorBox.textContent = "";
+            });
+        }
+      };
+
+      // APK self-update: every launch compares this build against the rolling
+      // "android" release; a newer one auto-downloads (the native download
+      // listener hands the APK to the system browser). Only the app does this
+      // — the regular web version never ships this page.
+      const checkForUpdate = async () => {
+        if (!/^\d+$/.test(APP_BUILD)) return null; // dev build
+        try {
+          const response = await fetch(RELEASE_API, {
+            headers: { Accept: "application/vnd.github+json" },
+            signal: AbortSignal.timeout(4000),
           });
-      }
+          if (!response.ok) return null;
+          const release = await response.json();
+          const remote = String(release.body || "").match(/Build:\s*(\d+)/i);
+          if (!remote || Number(remote[1]) <= Number(APP_BUILD)) return null;
+          const asset = (release.assets || []).find((a) => a.name === "pax-historia.apk");
+          return asset ? { build: remote[1], url: asset.browser_download_url } : null;
+        } catch {
+          return null; // offline / rate-limited — just play
+        }
+      };
+
+      checkForUpdate().then((update) => {
+        if (!update) {
+          startNormalFlow();
+          return;
+        }
+        setup.style.display = "none";
+        connecting.style.display = "none";
+        document.getElementById("update").style.display = "flex";
+        document.getElementById("skipUpdate").addEventListener("click", () => {
+          document.getElementById("update").style.display = "none";
+          startNormalFlow();
+        });
+        window.location.href = update.url;
+      });
     </script>
   </body>
 </html>

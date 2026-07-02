@@ -28,6 +28,11 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Stamp the build number
+        # The connect screen compares this against "Build: N" in the release
+        # notes on every launch — that's the APK self-update check.
+        run: sed -i "s/__APP_BUILD__/${{ github.run_number }}/" mobile/www/index.html
+
       - name: Build the APK
         run: |
           cd mobile
@@ -49,7 +54,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create android --title "Android app" \
-            --notes "Thin Android client — connects to your Pax Historia server (Termux on the same phone, or any host on your network). Download pax-historia.apk below and open it to install (allow installs from your browser when Android asks). On first launch it finds a Termux server on the same phone automatically." \
-            2>/dev/null || true
+          NOTES="Thin Android client — connects to your Pax Historia server (Termux on the same phone, or any host on your network). Download pax-historia.apk below and open it to install (allow installs from your browser when Android asks). On first launch it finds a Termux server on the same phone automatically, and the app updates itself when a newer build is published here.
+
+          Build: ${{ github.run_number }}"
+          gh release create android --title "Android app" --notes "$NOTES" 2>/dev/null \
+            || gh release edit android --notes "$NOTES"
           gh release upload android pax-historia.apk --clobber
