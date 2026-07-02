@@ -1,3 +1,4 @@
+/*! Open Historia — portions (drawer close/slide + mobile layout) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Chart, registerables } from "chart.js";
@@ -247,7 +248,10 @@ const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
             transform: isAdvisorOpen ? "translateX(0)" : "translateX(calc(100% + 2rem))",
             width: ADVISOR_PANEL_WIDTH, height: "calc(100vh - 64px)",
             backgroundColor: "rgba(17, 24, 39, 0.95)", backdropFilter: "blur(8px)",
-            zIndex: 9998, borderLeft: "1px solid rgba(255,255,255,0.1)",
+            // Above every HUD button/panel (toolbar 9999, forces 10000,
+            // library panels 10031) so nothing covers the open drawer on
+            // phones; below the editor (10050) and server-down (10060) overlays.
+            zIndex: 10040, borderLeft: "1px solid rgba(255,255,255,0.1)",
             boxShadow: "-4px 0 24px rgba(0,0,0,0.4)",
             transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
             display: "flex", flexDirection: "column",
@@ -292,7 +296,8 @@ const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
                     {msg.role === "error" ? "⚠️ Error" : "🧭 Advisor"}
                     </span>
                 )}
-                <div style={{
+                {/* Player-typed text stays verbatim under UI translation. */}
+                <div data-no-translate={msg.role === "user" ? "" : undefined} style={{
                     maxWidth: "90%", width: chartConfig ? "90%" : undefined,
                     padding: "0.6rem 0.85rem",
                     borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
