@@ -18,6 +18,7 @@ import {
   getStoredLanguage,
   isRtlLanguage,
   languageDisplayName,
+  syncLanguageFromServer,
 } from "./i18n.js";
 
 const CACHE_PREFIX = "i18n_cache_";
@@ -29,13 +30,16 @@ const TRANSLATED_ATTRIBUTES = ["placeholder", "title", "aria-label"];
 
 // Elements whose text is user-authored, machine-formatted, or must stay
 // verbatim. [data-no-translate] lets any component opt out explicitly.
-const SKIP_SELECTOR = "script, style, noscript, input, textarea, select, [contenteditable], [data-no-translate]";
+// (<select> is NOT skipped — dropdown options are UI text too; the language
+// picker itself opts out via data-no-translate.)
+const SKIP_SELECTOR = "script, style, noscript, input, textarea, [contenteditable], [data-no-translate]";
 
 let language = DEFAULT_LANGUAGE;
 let cache = new Map();
 let pending = new Set();
 let inFlight = false;
 let stopped = false;
+let cooldownUntil = 0;
 let failureCount = 0;
 let observer = null;
 let scanTimer = null;
@@ -161,6 +165,16 @@ const scan = () => {
     }
   }
 
+  const title = document.title.trim();
+  if (title && isTranslatable(title)) {
+    const translatedTitle = cache.get(title);
+    if (translatedTitle && translatedTitle !== title) {
+      document.title = translatedTitle;
+    } else if (!translatedTitle) {
+      pending.add(title);
+    }
+  }
+
   void processQueue();
 };
 
@@ -218,7 +232,7 @@ const translateBatch = async (strings) => {
 };
 
 const processQueue = async () => {
-  if (inFlight || stopped || pending.size === 0) {
+  if (inFlight || stopped || pending.size === 0 || Date.now() < cooldownUntil) {
     return;
   }
 
@@ -233,10 +247,13 @@ const processQueue = async () => {
       } catch (error) {
         failureCount += 1;
         if (failureCount >= MAX_CONSECUTIVE_FAILURES) {
-          stopped = true;
+          // Back off instead of giving up for the session: a provider hiccup
+          // shouldn't leave the rest of the UI untranslated forever.
+          failureCount = 0;
+          cooldownUntil = Date.now() + 60000;
           console.warn(
-            `[i18n] translation stopped after ${failureCount} failed attempts (${error?.message || error}). ` +
-            `Check the AI provider settings; the game continues in English.`,
+            `[i18n] translation paused for 60s after repeated failures (${error?.message || error}). ` +
+            `Check the AI provider settings; untranslated text stays in English meanwhile.`,
           );
         }
         return;
@@ -258,8 +275,21 @@ const processQueue = async () => {
 };
 
 export const startTranslator = () => {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  // The server's stored choice wins over this device's copy, so a language
+  // picked on desktop applies in the Android app (and vice versa). Runs even
+  // when this device thinks it's English — a fresh install has no local copy.
+  void syncLanguageFromServer().then((changed) => {
+    if (changed) {
+      window.location.reload();
+    }
+  });
+
   language = getStoredLanguage();
-  if (language === DEFAULT_LANGUAGE || typeof document === "undefined") {
+  if (language === DEFAULT_LANGUAGE) {
     return;
   }
 

@@ -1,97 +1,73 @@
-/*! Pax Historia — language setting & 200+ language catalog © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+/*! Pax Historia — language setting & top-50 language catalog © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 
-// UI language: stored once, read everywhere. "en" (the authored language)
-// means no translation work happens at all.
+// UI language: chosen in Settings, stored on the SERVER (shared by every
+// device that plays through it — desktop browser and the Android app see the
+// same choice) and mirrored in localStorage so boot doesn't wait on a fetch.
+// "en" (the authored language) means no translation work happens at all.
 const STORAGE_KEY = "ui_language";
 export const DEFAULT_LANGUAGE = "en";
 
-// Full ISO 639-1 set (bh dropped — deprecated in favor of bho below)...
-const ISO_639_1 = [
-  "aa","ab","ae","af","ak","am","an","ar","as","av","ay","az",
-  "ba","be","bg","bi","bm","bn","bo","br","bs",
-  "ca","ce","ch","co","cr","cs","cu","cv","cy",
-  "da","de","dv","dz","ee","el","en","eo","es","et","eu",
-  "fa","ff","fi","fj","fo","fr","fy",
-  "ga","gd","gl","gn","gu","gv",
-  "ha","he","hi","ho","hr","ht","hu","hy","hz",
-  "ia","id","ie","ig","ii","ik","io","is","it","iu",
-  "ja","jv","ka","kg","ki","kj","kk","kl","km","kn","ko","kr","ks","ku","kv","kw","ky",
-  "la","lb","lg","li","ln","lo","lt","lu","lv",
-  "mg","mh","mi","mk","ml","mn","mr","ms","mt","my",
-  "na","nb","nd","ne","ng","nl","nn","no","nr","nv","ny",
-  "oc","oj","om","or","os",
-  "pa","pi","pl","ps","pt","qu",
-  "rm","rn","ro","ru","rw",
-  "sa","sc","sd","se","sg","si","sk","sl","sm","sn","so","sq","sr","ss","st","su","sv","sw",
-  "ta","te","tg","th","ti","tk","tl","tn","to","tr","ts","tt","tw","ty",
-  "ug","uk","ur","uz","ve","vi","vo","wa","wo","xh","yi","yo","za","zh","zu",
+// The 50 most spoken languages, hand-curated: recognizable English name
+// first, endonym after. A full ISO dump read like random letters here.
+export const LANGUAGES = [
+  { code: "en", name: "English", native: "English" },
+  { code: "zh", name: "Chinese (Mandarin)", native: "中文" },
+  { code: "hi", name: "Hindi", native: "हिन्दी" },
+  { code: "es", name: "Spanish", native: "Español" },
+  { code: "fr", name: "French", native: "Français" },
+  { code: "ar", name: "Arabic", native: "العربية" },
+  { code: "bn", name: "Bengali", native: "বাংলা" },
+  { code: "pt", name: "Portuguese", native: "Português" },
+  { code: "ru", name: "Russian", native: "Русский" },
+  { code: "ur", name: "Urdu", native: "اردو" },
+  { code: "id", name: "Indonesian", native: "Bahasa Indonesia" },
+  { code: "de", name: "German", native: "Deutsch" },
+  { code: "ja", name: "Japanese", native: "日本語" },
+  { code: "sw", name: "Swahili", native: "Kiswahili" },
+  { code: "mr", name: "Marathi", native: "मराठी" },
+  { code: "te", name: "Telugu", native: "తెలుగు" },
+  { code: "tr", name: "Turkish", native: "Türkçe" },
+  { code: "ta", name: "Tamil", native: "தமிழ்" },
+  { code: "vi", name: "Vietnamese", native: "Tiếng Việt" },
+  { code: "ko", name: "Korean", native: "한국어" },
+  { code: "it", name: "Italian", native: "Italiano" },
+  { code: "ha", name: "Hausa", native: "Hausa" },
+  { code: "th", name: "Thai", native: "ไทย" },
+  { code: "gu", name: "Gujarati", native: "ગુજરાતી" },
+  { code: "kn", name: "Kannada", native: "ಕನ್ನಡ" },
+  { code: "fa", name: "Persian", native: "فارسی" },
+  { code: "pl", name: "Polish", native: "Polski" },
+  { code: "uk", name: "Ukrainian", native: "Українська" },
+  { code: "ml", name: "Malayalam", native: "മലയാളം" },
+  { code: "my", name: "Burmese", native: "မြန်မာ" },
+  { code: "pa", name: "Punjabi", native: "ਪੰਜਾਬੀ" },
+  { code: "ro", name: "Romanian", native: "Română" },
+  { code: "nl", name: "Dutch", native: "Nederlands" },
+  { code: "el", name: "Greek", native: "Ελληνικά" },
+  { code: "cs", name: "Czech", native: "Čeština" },
+  { code: "hu", name: "Hungarian", native: "Magyar" },
+  { code: "sv", name: "Swedish", native: "Svenska" },
+  { code: "he", name: "Hebrew", native: "עברית" },
+  { code: "ms", name: "Malay", native: "Bahasa Melayu" },
+  { code: "fil", name: "Filipino", native: "Filipino" },
+  { code: "am", name: "Amharic", native: "አማርኛ" },
+  { code: "ne", name: "Nepali", native: "नेपाली" },
+  { code: "si", name: "Sinhala", native: "සිංහල" },
+  { code: "km", name: "Khmer", native: "ខ្មែរ" },
+  { code: "so", name: "Somali", native: "Soomaali" },
+  { code: "az", name: "Azerbaijani", native: "Azərbaycanca" },
+  { code: "uz", name: "Uzbek", native: "Oʻzbekcha" },
+  { code: "yo", name: "Yoruba", native: "Yorùbá" },
+  { code: "fi", name: "Finnish", native: "Suomi" },
+  { code: "da", name: "Danish", native: "Dansk" },
 ];
 
-// ...plus widely spoken languages that only have 639-2/3 codes. Names are
-// hardcoded because Intl.DisplayNames coverage for these varies by browser.
-const EXTRA_LANGUAGES = {
-  ace: "Acehnese",
-  bcl: "Bikol",
-  bho: "Bhojpuri",
-  ceb: "Cebuano",
-  ckb: "Kurdish (Sorani)",
-  crh: "Crimean Tatar",
-  doi: "Dogri",
-  fil: "Filipino",
-  gaa: "Ga",
-  gom: "Konkani (Goan)",
-  haw: "Hawaiian",
-  hil: "Hiligaynon",
-  hmn: "Hmong",
-  ilo: "Ilocano",
-  kaa: "Karakalpak",
-  kbd: "Kabardian",
-  lus: "Mizo",
-  mai: "Maithili",
-  min: "Minangkabau",
-  mni: "Meitei (Manipuri)",
-  pag: "Pangasinan",
-  pam: "Kapampangan",
-  sat: "Santali",
-  tet: "Tetum",
-  tpi: "Tok Pisin",
-  war: "Waray",
-};
+const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
-const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur", "ps", "sd", "dv", "ug", "yi", "ckb"]);
-
-const displayNamesOf = (code, inLocale) => {
-  try {
-    const names = new Intl.DisplayNames([inLocale], { type: "language" });
-    const name = names.of(code);
-    return name && name !== code ? name : "";
-  } catch {
-    return "";
-  }
-};
+export const getLanguageOptions = () => LANGUAGES;
 
 export const languageDisplayName = (code) =>
-  EXTRA_LANGUAGES[code] || displayNamesOf(code, "en") || code;
-
-let optionsCache = null;
-
-export const getLanguageOptions = () => {
-  if (optionsCache) {
-    return optionsCache;
-  }
-
-  const codes = [...ISO_639_1, ...Object.keys(EXTRA_LANGUAGES)];
-  optionsCache = codes
-    .map((code) => {
-      const name = languageDisplayName(code);
-      // Endonym so people can find their own language in the list.
-      const nativeName = EXTRA_LANGUAGES[code] ? "" : displayNamesOf(code, code);
-      return { code, name, nativeName: nativeName === name ? "" : nativeName };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, "en"));
-
-  return optionsCache;
-};
+  LANGUAGES.find((entry) => entry.code === code)?.name || code;
 
 export const getStoredLanguage = () => {
   try {
@@ -102,7 +78,7 @@ export const getStoredLanguage = () => {
   }
 };
 
-export const setStoredLanguage = (code) => {
+const writeLocalLanguage = (code) => {
   try {
     if (!code || code === DEFAULT_LANGUAGE) {
       localStorage.removeItem(STORAGE_KEY);
@@ -112,6 +88,46 @@ export const setStoredLanguage = (code) => {
   } catch {
     // Private-mode storage failures just leave the game in English.
   }
+};
+
+// Persist locally AND on the server, so the choice follows the player to
+// every device connected to this server (the Android app included).
+export const setStoredLanguage = async (code) => {
+  writeLocalLanguage(code);
+  try {
+    await fetch("/api/ui-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: code || DEFAULT_LANGUAGE }),
+    });
+  } catch {
+    // Offline/hub-hosted: the local copy still applies on this device.
+  }
+};
+
+// Boot-time reconcile: the server's choice wins. Returns true when the local
+// value changed (caller reloads so the translator restarts cleanly).
+export const syncLanguageFromServer = async () => {
+  try {
+    const response = await fetch("/api/ui-settings");
+    if (!response.ok) {
+      return false;
+    }
+
+    const settings = await response.json();
+    const serverLanguage = typeof settings?.language === "string" && settings.language.trim()
+      ? settings.language.trim()
+      : DEFAULT_LANGUAGE;
+
+    if (serverLanguage !== getStoredLanguage()) {
+      writeLocalLanguage(serverLanguage);
+      return true;
+    }
+  } catch {
+    // Server unreachable: keep the local value.
+  }
+
+  return false;
 };
 
 export const isRtlLanguage = (code) => RTL_LANGUAGES.has(code);
