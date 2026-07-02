@@ -1,5 +1,5 @@
 /*! Pax Historia — portions (custom-regions tier-2 rendering) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
 import { onRegionSelected, dismissRegionPopup } from "../Selection/Regions";
 import { onUnitSelected, dismissUnitPopup } from "../Selection/Units";
@@ -56,6 +56,19 @@ const fallbackColorFromCode = (code = "") => {
 
 // Neutral tone for unowned custom regions (land with no owner code).
 const NEUTRAL_LAND_COLOR = "rgb(88, 98, 110)";
+
+// GADM region ids contain a dot ("DEU.2_1"); author-drawn regions ("reg_...")
+// don't. On custom maps, GADM regions crossfade between two sources: the seed
+// GeoJSON when zoomed OUT (the stock tiles are too simplified out there and
+// show sliver gaps) and the stock vector tiles when zoomed IN (the z5 seed is
+// too coarse up close). Author-drawn geometry renders from the GeoJSON at every
+// zoom, on top — the tiles don't know those shapes.
+const CUSTOM_GEOMETRY_FILTER = ["==", ["index-of", ".", ["get", "id"]], -1];
+const GADM_GEOMETRY_FILTER = [">=", ["index-of", ".", ["get", "id"]], 0];
+// Crossfade band: seed geometry was extracted at tile-zoom 5, so hand off to
+// the tiles just past that.
+const FAR_FILL_FADE = ["interpolate", ["linear"], ["zoom"], 5.5, 0.72, 6.5, 0];
+const TILE_FILL_FADE = ["interpolate", ["linear"], ["zoom"], 5.5, 0, 6.5, 0.72];
 
 // ---- Owner labels for custom maps -----------------------------------------
 // The stock label pipeline labels modern countries from countries.pmtiles, which
@@ -299,15 +312,19 @@ const WorldMap = () => {
     if (!features.length) return;
 
     const props = features[0].properties ?? {};
+    const regionId = props.GID_1 ?? props.id ?? "";
+    // On custom maps, stock-tile hits carry modern props only — resolve the era
+    // owner (possibly "" = unclaimed) from the ownership lookup.
+    const owner = props.owner ?? (ownerLookupRef.current.size ? ownerLookupRef.current.get(regionId) : undefined);
     onRegionSelected({
       COUNTRY: props.COUNTRY ?? props.country ?? "",
       NAME_1: props.NAME_1 ?? props.name ?? "",
-      GID_0: props.GID_0 ?? props.owner ?? props.gid0 ?? "",
-      GID_1: props.GID_1 ?? props.id ?? "",
+      GID_0: owner || (owner === "" ? "" : props.GID_0 ?? props.gid0 ?? ""),
+      GID_1: regionId,
       // gid0 = the region's underlying real country (flag fallback when the owner
-      // is a custom polity like "HRE"). owner "" flags an unclaimed custom region.
+      // is a custom polity like "HRE"). owner "" flags an unclaimed region.
       gid0: props.gid0 ?? props.GID_0 ?? "",
-      owner: props.owner,
+      owner,
       lngLat: event.lngLat,
     });
   }, [map]);
@@ -447,8 +464,53 @@ const WorldMap = () => {
     };
   }, [colorMap, worldState]);
 
-  // When a custom map is active the stock country fill and both border layers are
-  // suppressed so only the editor geometry shows; otherwise they render as before.
+  // Region id -> current owner (live overrides win). Drives the stock-tile fill,
+  // and the click handler uses it to resolve era owner/unclaimed for the popup.
+  const ownerByRegionId = useMemo(() => {
+    const lookup = new Map();
+    if (!customActive) return lookup;
+    const overrides = worldState?.regionOwnershipOverrides ?? {};
+    for (const feature of customRegionData?.features ?? []) {
+      const props = feature.properties || {};
+      if (!props.id) continue;
+      lookup.set(props.id, overrides[props.id] ?? props.owner ?? "");
+    }
+    return lookup;
+  }, [customActive, customRegionData, worldState]);
+
+  const ownerLookupRef = useRef(new Map());
+  useEffect(() => {
+    ownerLookupRef.current = ownerByRegionId;
+  }, [ownerByRegionId]);
+
+  // GADM regions on custom maps paint the STOCK vector tiles (sharp geometry at
+  // every zoom — the coarse seed polygons left sliver gaps up close). Only
+  // author-drawn shapes still render from the GeoJSON, on top.
+  const stockRegionsFillPaint = useMemo(() => {
+    if (!customActive) return { "fill-opacity": 0 };
+    const stops = [];
+    for (const [regionId, owner] of ownerByRegionId) {
+      if (!regionId.includes(".")) continue; // drawn regions aren't in the tiles
+      stops.push(
+        regionId,
+        owner
+          ? colorMap[owner]
+            ? `rgb(${colorMap[owner][0]}, ${colorMap[owner][1]}, ${colorMap[owner][2]})`
+            : fallbackColorFromCode(owner)
+          : NEUTRAL_LAND_COLOR,
+      );
+    }
+    if (!stops.length) return { "fill-opacity": 0 };
+    return {
+      "fill-color": ["match", ["get", "GID_1"], ...stops, NEUTRAL_LAND_COLOR],
+      // Fades in as the seed-geometry far layer fades out.
+      "fill-opacity": TILE_FILL_FADE,
+    };
+  }, [customActive, ownerByRegionId, colorMap]);
+
+  // When a custom map is active the stock country-level fill/borders are hidden
+  // (era borders replace them); the stock REGION borders stay on — they're the
+  // crisp border art for the tile-painted regions.
   const countriesFillPaint = customActive ? { ...fillStyle, "fill-opacity": 0 } : fillStyle;
   const countriesOutlinePaint = {
     "line-color": "#000",
@@ -458,9 +520,7 @@ const WorldMap = () => {
   const regionsOutlinePaint = {
     "line-color": "#000",
     "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.2, 8, 0.6, 12, 1.0],
-    "line-opacity": customActive
-      ? 0
-      : ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 0.4, 8, 0.7],
+    "line-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 0.4, 8, 0.7],
   };
 
   const pointLabelLayerLayout = useMemo(() => ({
@@ -520,7 +580,7 @@ const WorldMap = () => {
           id="regions-fill"
           type="fill"
           source-layer="regions"
-          paint={{ "fill-opacity": 0 }}
+          paint={stockRegionsFillPaint}
         />
         <Layer
           id="regions-outline"
@@ -530,17 +590,29 @@ const WorldMap = () => {
         />
       </Source>
 
-      {/* Custom (editor) geometry — rendered above the stock regions and below the
-          country labels. Empty (and inert) unless world.customRegions is set. */}
+      {/* Author-DRAWN geometry only (splits/new regions) — GADM regions paint the
+          stock tiles above for crisp borders at every zoom. Empty (and inert)
+          unless world.customRegions is set. */}
       <Source id="custom-regions-source" type="geojson" data={customRegionData}>
+        {/* Zoomed-out fill for GADM regions from the seed geometry — the stock
+            tiles are too simplified at low zoom and show sliver gaps there. */}
+        <Layer
+          id="custom-regions-fill-far"
+          type="fill"
+          maxzoom={7}
+          filter={GADM_GEOMETRY_FILTER}
+          paint={{ "fill-color": customFillStyle["fill-color"], "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
+        />
         <Layer
           id="custom-regions-fill"
           type="fill"
+          filter={CUSTOM_GEOMETRY_FILTER}
           paint={customFillStyle}
         />
         <Layer
           id="custom-regions-outline"
           type="line"
+          filter={CUSTOM_GEOMETRY_FILTER}
           paint={{
             "line-color": "#000",
             // Match the old map's *region* border design: thin, and only fading in
