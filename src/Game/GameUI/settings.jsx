@@ -144,13 +144,6 @@ const LanguageSelector = () => {
             </option>
         ))}
         </select>
-        <p style={helperStyle}>
-        The 50 most spoken languages. Switching pre-translates everything once
-        with your configured AI provider (a progress pill shows) — after that,
-        menus, scenarios, the community tab, and AI replies open already
-        translated. The choice is saved on the server, so the Android app and
-        every browser use it too.
-        </p>
         </div>
     );
 };

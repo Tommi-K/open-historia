@@ -391,7 +391,10 @@ const StartupScreen = ({
       }
       `}</style>
 
-      <div className="ss-shell">
+      {/* data-startup-screen: the translator waits for this to disappear
+          before doing ANY work, so translation can never stall the load;
+          data-no-translate keeps its fast-changing progress text verbatim. */}
+      <div className="ss-shell" data-startup-screen="" data-no-translate="">
       {availableImages.map((src, index) => (
         <div
         key={src}

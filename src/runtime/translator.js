@@ -47,11 +47,44 @@ let observer = null;
 let scanTimer = null;
 let persistTimer = null;
 let progressEl = null;
+let unsyncedEntries = {};
+let syncTimer = null;
+let updatedEventTimer = null;
 // node → the source (English) string we last saw there, so re-renders that
 // restore English are re-translated and our own writes are recognized.
 const nodeSources = new WeakMap();
 
 const cacheKey = () => `${CACHE_PREFIX}${language}`;
+
+// New translations are pushed to the server's language pack (debounced), so
+// every device — and every future session — reuses them instead of paying
+// for the same AI call again. The pack lives under server/data, which the
+// update script never touches.
+const syncEntriesToServer = () => {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    const entries = unsyncedEntries;
+    unsyncedEntries = {};
+    if (Object.keys(entries).length === 0) return;
+    try {
+      await fetch(`/api/lang/${language}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries }),
+      });
+    } catch {
+      // Old server / offline: localStorage still has them for this device.
+    }
+  }, 2000);
+};
+
+// Lets map-label builders re-render once translations have (newly) arrived.
+const announceUpdate = () => {
+  clearTimeout(updatedEventTimer);
+  updatedEventTimer = setTimeout(() => {
+    window.dispatchEvent(new Event("i18n:updated"));
+  }, 800);
+};
 
 const loadCache = () => {
   try {
@@ -95,7 +128,7 @@ const updateProgress = () => {
     progressEl = null;
     return;
   }
-  progressEl.textContent = `Translating to ${languageDisplayName(language)}… ${pending.size} left`;
+  progressEl.textContent = `Translating to ${languageDisplayName(language)}…`;
 };
 
 // ---- string filters & application ----
@@ -330,6 +363,7 @@ const processQueue = async () => {
             ? result.translations[index].trim()
             : "";
           cache.set(source, translated || source);
+          unsyncedEntries[source] = translated || source;
           pending.delete(source);
         });
       }
@@ -356,6 +390,8 @@ const processQueue = async () => {
 
       updateProgress();
       persistCache();
+      syncEntriesToServer();
+      announceUpdate();
       // Apply what we just learned (and pick up anything rendered meanwhile).
       scan();
     }
@@ -438,7 +474,115 @@ const collectCatalogStrings = async () => {
   } catch { /* optional */ }
 };
 
+// ---- public lookups (map labels, proactive callers) ----
+
+let translatorActive = false;
+
+// Synchronous best-effort translation for text drawn OUTSIDE the DOM (map
+// country labels). Unknown strings are queued and an "i18n:updated" event
+// fires once they resolve, so callers can rebuild.
+export const translateLabel = (text) => {
+  if (!translatorActive || typeof text !== "string") {
+    return text;
+  }
+  const trimmed = text.trim();
+  const translated = cache.get(trimmed);
+  if (translated) {
+    return translated;
+  }
+  if (isTranslatable(trimmed)) {
+    pending.add(trimmed);
+    scheduleScan();
+  }
+  return text;
+};
+
+// Proactively queue strings that exist as data but may not be rendered yet
+// (e.g. freshly fetched Community-hub posts). Only uncached ones cost a call.
+export const enqueueStrings = (strings) => {
+  if (!translatorActive) return;
+  let added = false;
+  for (const value of strings ?? []) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed && isTranslatable(trimmed) && !cache.has(trimmed)) {
+      pending.add(trimmed);
+      added = true;
+    }
+  }
+  if (added) {
+    void processQueue();
+  }
+};
+
+// Human-readable fields inside written game content. When the player edits a
+// description (or the AI writes new events/polities), these are pulled out
+// and translated right away — and land in the server pack — instead of
+// waiting to be rendered somewhere first.
+const CONTENT_TEXT_KEYS = new Set([
+  "name", "title", "subtitle", "description", "eyebrow", "heroTitle",
+  "heroSubtitle", "summary", "blurb", "note", "label",
+]);
+
+export const enqueueContentStrings = (payload) => {
+  if (!translatorActive || !payload) return;
+  const found = [];
+  const walk = (value, depth) => {
+    if (depth > 6 || value == null) return;
+    if (Array.isArray(value)) {
+      if (value.length <= 500) value.forEach((entry) => walk(entry, depth + 1));
+      return;
+    }
+    if (typeof value !== "object") return;
+    for (const [key, entry] of Object.entries(value)) {
+      // Geometry payloads can be enormous and contain no UI text.
+      if (key === "features" || key === "geometry" || key === "coordinates") continue;
+      if (typeof entry === "string") {
+        if (CONTENT_TEXT_KEYS.has(key)) found.push(entry);
+      } else if (key === "aliases" && Array.isArray(entry)) {
+        entry.forEach((alias) => typeof alias === "string" && found.push(alias));
+      } else {
+        walk(entry, depth + 1);
+      }
+    }
+  };
+  walk(payload, 0);
+  enqueueStrings(found);
+};
+
 // ---- lifecycle ----
+
+// Merge the server's language pack (shipped top-10 packs + every translation
+// any device has generated) into the local cache.
+const loadServerPack = async () => {
+  try {
+    const response = await fetch(`/api/lang/${language}`);
+    if (!response.ok) return;
+    const pack = await response.json();
+    for (const [source, translated] of Object.entries(pack ?? {})) {
+      if (typeof source === "string" && typeof translated === "string" && !cache.has(source)) {
+        cache.set(source, translated);
+      }
+    }
+    persistCache();
+  } catch {
+    // Old server / offline: the localStorage cache still applies.
+  }
+};
+
+// Translation must NEVER interfere with game startup: wait until the loading
+// screen is gone (or a generous timeout) before touching the DOM at all.
+const whenStartupScreenGone = () => new Promise((resolve) => {
+  const startedAt = Date.now();
+  const check = () => {
+    if (!document.querySelector("[data-startup-screen]") || Date.now() - startedAt > 180000) {
+      resolve();
+    } else {
+      setTimeout(check, 400);
+    }
+  };
+  check();
+});
 
 export const startTranslator = () => {
   if (typeof document === "undefined") {
@@ -467,17 +611,25 @@ export const startTranslator = () => {
   }
 
   loadCache();
-  observer = new MutationObserver(handleMutations);
-  observer.observe(document.body, {
-    childList: true,
-    characterData: true,
-    subtree: true,
-  });
-  scan();
 
-  // One-time pre-translation of everything the game can show. On later
-  // boots the cache already covers it and this drains instantly.
   void (async () => {
+    // Server pack first (cheap, instant), then wait out the loading screen.
+    await loadServerPack();
+    await whenStartupScreenGone();
+    if (stopped) return;
+
+    translatorActive = true;
+    observer = new MutationObserver(handleMutations);
+    observer.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    scan();
+    announceUpdate();
+
+    // One-time pre-translation of everything the game can show. On later
+    // boots the pack + cache already cover it and this drains instantly.
     await collectCatalogStrings();
     if (pending.size > 10) {
       showProgress();
