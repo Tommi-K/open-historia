@@ -25,8 +25,7 @@
 </div>
 
 <div align="center">
-  <sub>Built with ❤︎ by <a href="https://github.com/Tommi-K">Tommi-K</a> and <a href="https://github.com/Tommi-K/pax-historia/graphs/contributors">contributors</a>.
-  This fork adds the map editor, troops, the Scenario Hub and more — additions © <a href="src/Editor/LICENSE">Nicholas Krol, MIT</a>.</sub>
+  <sub>Built with ❤︎ by <a href="https://github.com/Tommi-K/pax-historia/graphs/contributors">contributors</a>.
 </div>
 
 <br />
@@ -61,8 +60,8 @@ installs dependencies, builds, and opens the game.
 Prerequisites: [Git](https://git-scm.com/) (with [Git LFS](https://git-lfs.com/)) and [Node.js](https://nodejs.org/en).
 
 ```bash
-git clone https://github.com/Arkniem/pax-historia-2.git
-cd pax-historia-2
+git clone https://github.com/Tommi-K//pax-historia.git
+cd pax-historia
 git lfs install        # Set up Git LFS
 git lfs pull           # Pull large files (map tiles + editor seeds + world map)
 npm install            # Install dependencies (includes OpenLayers etc. for the editor)
