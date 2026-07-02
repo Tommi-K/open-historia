@@ -1,3 +1,4 @@
+/*! Open Historia — portions (CORS, AI relay, shutdown endpoint, hub proxy) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -113,6 +114,98 @@ const streamBinaryFile = (req, res, sourcePath, contentType = "application/octet
   res.setHeader("Content-Range", `bytes ${clampedStart}-${clampedEnd}/${totalSize}`);
   fs.createReadStream(sourcePath, { end: clampedEnd, start: clampedStart }).pipe(res);
 };
+
+// Global client preferences (currently the UI language) shared by every
+// device that plays through this server — the phone app and desktop browser
+// see the same choice, instead of each browser keeping its own.
+const uiSettingsFile = path.join(__dirname, "data", "ui-settings.json");
+
+const readUiSettings = () => {
+  try {
+    return JSON.parse(fs.readFileSync(uiSettingsFile, "utf8"));
+  } catch {
+    return {};
+  }
+};
+
+app.get("/api/ui-settings", (_req, res) => {
+  res.json(readUiSettings());
+});
+
+// Language packs. Two layers merge:
+//  - shipped packs (public/lang/<code>.json, arrive with updates) seed the
+//    top languages so common strings never need an AI call;
+//  - saved packs (server/data/lang/<code>.json) accumulate every translation
+//    generated at runtime. They live under server/data, which the update
+//    script never touches, so they survive updates. Saved entries win.
+const shippedLangDir = fs.existsSync(path.join(distDir, "lang"))
+  ? path.join(distDir, "lang")
+  : path.join(__dirname, "../public/lang");
+const savedLangDir = path.join(__dirname, "data", "lang");
+
+const readLangPack = (dir, code) => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(dir, `${code}.json`), "utf8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const isLangCode = (code) => /^[a-z]{2,3}$/.test(code);
+
+app.get("/api/lang/:code", (req, res) => {
+  const code = String(req.params.code || "").toLowerCase();
+  if (!isLangCode(code)) {
+    return sendError(res, 400, "Invalid language code.");
+  }
+  res.json({ ...readLangPack(shippedLangDir, code), ...readLangPack(savedLangDir, code) });
+});
+
+app.put("/api/lang/:code", largeJsonParser, (req, res) => {
+  try {
+    const code = String(req.params.code || "").toLowerCase();
+    if (!isLangCode(code)) {
+      return sendError(res, 400, "Invalid language code.");
+    }
+    const entries = req.body?.entries;
+    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+      return sendError(res, 400, "Body must be { entries: { source: translation } }.");
+    }
+    const saved = readLangPack(savedLangDir, code);
+    let added = 0;
+    for (const [source, translated] of Object.entries(entries)) {
+      if (typeof source === "string" && typeof translated === "string" &&
+          source.length <= 3000 && translated.length <= 6000) {
+        if (saved[source] !== translated) {
+          saved[source] = translated;
+          added += 1;
+        }
+      }
+    }
+    if (added > 0) {
+      fs.mkdirSync(savedLangDir, { recursive: true });
+      fs.writeFileSync(path.join(savedLangDir, `${code}.json`), JSON.stringify(saved));
+    }
+    res.json({ saved: added, total: Object.keys(saved).length });
+  } catch (error) {
+    sendError(res, 500, error);
+  }
+});
+
+app.put("/api/ui-settings", jsonParser, (req, res) => {
+  try {
+    const next = { ...readUiSettings() };
+    if (typeof req.body?.language === "string" && req.body.language.trim().length <= 16) {
+      next.language = req.body.language.trim();
+    }
+    fs.mkdirSync(path.dirname(uiSettingsFile), { recursive: true });
+    fs.writeFileSync(uiSettingsFile, JSON.stringify(next, null, 2));
+    res.json(next);
+  } catch (error) {
+    sendError(res, 500, error);
+  }
+});
 
 app.get("/api/scenarios", (_req, res) => {
   try {
@@ -487,7 +580,7 @@ const httpServer = app.listen(PORT, () => {
 // then reported as a bare "Server stopped." — say what actually happened.
 httpServer.on("error", (error) => {
   if (error?.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use — Pax Historia is probably already running.`);
+    console.error(`Port ${PORT} is already in use — Open Historia is probably already running.`);
     console.error("Close the other instance (the ⏻ button in the game stops it), or set the");
     console.error(`PORT environment variable to run this one on a different port.`);
     process.exit(1);

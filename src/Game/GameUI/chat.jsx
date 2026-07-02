@@ -1,3 +1,4 @@
+/*! Open Historia — portions (era diplomacy + mobile panel sizing) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import ReactMarkdown from "react-markdown";
@@ -186,7 +187,8 @@ const MessageBubble = ({ msg }) => {
             </div>
         )}
 
-        <div style={{
+        {/* Player-typed text stays verbatim under UI translation. */}
+        <div data-no-translate={isPlayer ? "" : undefined} style={{
             padding: "0.6rem 0.85rem",
             borderRadius: isPlayer ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
             backgroundColor: isPlayer
