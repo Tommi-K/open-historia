@@ -115,6 +115,37 @@ const streamBinaryFile = (req, res, sourcePath, contentType = "application/octet
   fs.createReadStream(sourcePath, { end: clampedEnd, start: clampedStart }).pipe(res);
 };
 
+// Global client preferences (currently the UI language) shared by every
+// device that plays through this server — the phone app and desktop browser
+// see the same choice, instead of each browser keeping its own.
+const uiSettingsFile = path.join(__dirname, "data", "ui-settings.json");
+
+const readUiSettings = () => {
+  try {
+    return JSON.parse(fs.readFileSync(uiSettingsFile, "utf8"));
+  } catch {
+    return {};
+  }
+};
+
+app.get("/api/ui-settings", (_req, res) => {
+  res.json(readUiSettings());
+});
+
+app.put("/api/ui-settings", jsonParser, (req, res) => {
+  try {
+    const next = { ...readUiSettings() };
+    if (typeof req.body?.language === "string" && req.body.language.trim().length <= 16) {
+      next.language = req.body.language.trim();
+    }
+    fs.mkdirSync(path.dirname(uiSettingsFile), { recursive: true });
+    fs.writeFileSync(uiSettingsFile, JSON.stringify(next, null, 2));
+    res.json(next);
+  } catch (error) {
+    sendError(res, 500, error);
+  }
+});
+
 app.get("/api/scenarios", (_req, res) => {
   try {
     res.json(getScenarioCatalog());

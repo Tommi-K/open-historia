@@ -95,20 +95,23 @@ function groupProviders(options) {
 
 const LanguageSelector = () => {
     const [query, setQuery] = useState("");
+    const [saving, setSaving] = useState(false);
     const current = getStoredLanguage();
     const options = getLanguageOptions();
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = normalizedQuery
         ? options.filter((option) =>
-            `${option.name} ${option.nativeName} ${option.code}`.toLowerCase().includes(normalizedQuery))
+            `${option.name} ${option.native} ${option.code}`.toLowerCase().includes(normalizedQuery))
         : options;
 
-    const applyLanguage = (code) => {
-        if (!code || code === current) {
+    const applyLanguage = async (code) => {
+        if (!code || code === current || saving) {
             return;
         }
 
-        setStoredLanguage(code);
+        setSaving(true);
+        // Saves on the server too, so the phone app follows the same choice.
+        await setStoredLanguage(code);
         // Reload so the translator starts (or stops) cleanly and every
         // already-rendered string goes through it from scratch.
         window.location.reload();
@@ -128,7 +131,7 @@ const LanguageSelector = () => {
         data-no-translate
         value={filtered.some((option) => option.code === current) ? current : ""}
         onChange={(event) => applyLanguage(event.target.value)}
-        style={{ ...inputStyle, cursor: "pointer" }}
+        style={{ ...inputStyle, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
         >
         {!filtered.some((option) => option.code === current) && (
             <option value="" disabled>
@@ -137,14 +140,15 @@ const LanguageSelector = () => {
         )}
         {filtered.map((option) => (
             <option key={option.code} value={option.code} style={{ color: "black" }}>
-            {option.name}{option.nativeName ? ` — ${option.nativeName}` : ""}
+            {option.name}{option.native && option.native !== option.name ? ` — ${option.native}` : ""}
             </option>
         ))}
         </select>
         <p style={helperStyle}>
-        {options.length}+ languages. Non-English translations are AI-generated
-        with your configured provider — the interface, scenarios, and AI
-        replies all follow. Changing this reloads the game.
+        The 50 most spoken languages. Non-English text is AI-translated with
+        your configured provider — the interface, scenarios, and AI replies
+        all follow. The choice is saved on the server, so the Android app and
+        every browser use it too. Changing this reloads the game.
         </p>
         </div>
     );
@@ -609,6 +613,7 @@ const SettingsMenu = ({
     onApiProviderChange,
     providerSettings,
     onProviderSettingChange,
+    onOpenCheats,
     discordUrl,
     githubUrl,
 }) => {
@@ -661,6 +666,31 @@ const SettingsMenu = ({
         <Toggle label="Fullscreen" enabled={isFullscreenEnabled} onToggle={onToggleFullscreen} />
         <Toggle label="3D Globe" enabled={isGlobeEnabled} onToggle={onToggleGlobe} />
         <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
+
+        {typeof onOpenCheats === "function" && (
+            <button
+            type="button"
+            onClick={onOpenCheats}
+            style={{
+                alignItems: "center",
+                background: "rgba(124,58,237,0.22)",
+                border: "1px solid rgba(139,92,246,0.45)",
+                borderRadius: "8px",
+                color: "white",
+                cursor: "pointer",
+                display: "flex",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                gap: "0.5rem",
+                justifyContent: "center",
+                marginBottom: "1rem",
+                padding: "0.6rem 0.7rem",
+                width: "100%",
+            }}
+            >
+            🧪 Cheats
+            </button>
+        )}
 
         <SocialLinks discordUrl={discordUrl} githubUrl={githubUrl} />
         </div>
