@@ -368,6 +368,33 @@ const HUB_DOWNLOAD_HOSTS = new Set([
 ]);
 const HUB_MAX_BUNDLE_BYTES = 200 * 1024 * 1024;
 
+// Browser AI calls to self-hosted OpenAI-compatible endpoints (llama.cpp,
+// LM Studio, NVIDIA NIM...) die on CORS — those servers rarely send the
+// headers. The game server relays them instead: same-origin for the browser,
+// plain server-to-server for the endpoint. The target is whatever the player
+// configured in Settings — them talking to their own AI through their own
+// game server.
+app.post("/api/ai/relay", largeJsonParser, async (req, res) => {
+  try {
+    const { url: targetUrl, method = "POST", headers = {}, payload } = req.body ?? {};
+    const target = new URL(String(targetUrl ?? ""));
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return sendError(res, 400, new Error("Only http(s) AI endpoints can be relayed."));
+    }
+    const upstream = await fetch(target, {
+      method: method === "GET" ? "GET" : "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: method === "GET" ? undefined : JSON.stringify(payload ?? {}),
+    });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    res.type(upstream.headers.get("content-type") || "application/json");
+    res.send(text);
+  } catch (error) {
+    sendError(res, 502, error);
+  }
+});
+
 // Shut the server down from the UI (the ⏻ button in the top bar) — handy on
 // phones/Termux and headless installs where no terminal is in sight. Responds
 // first so the client can show its "server stopped" screen, then exits.
