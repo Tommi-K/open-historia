@@ -1,8 +1,9 @@
-/*! Pax Historia — portions (troop system integration) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+/*! Open Historia — portions (troop system integration) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useCallback, useMemo, useRef } from "react";
 import Map from "react-map-gl/maplibre";
 import Nations from "./Nations";
 import RegionPopup from "../Selection/Regions";
+import CountryInfoPanel from "../Selection/CountryPanel.jsx";
 import Cities from "./Cities";
 import Units from "./Units";
 import UnitPopup from "../Selection/Units";
@@ -142,6 +143,7 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         <Cities />
         <Units />
         <RegionPopup />
+        <CountryInfoPanel />
         <UnitPopup />
       </Map>
     </div>

@@ -1,4 +1,4 @@
-/*! Pax Historia — portions (era polity names/flags + intel briefing) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+/*! Open Historia — portions (era polity names/flags + intel briefing) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
@@ -6,7 +6,7 @@ import { resolveCountryDisplayName } from "../../runtime/assets.js";
 import { flagImageUrlFromGid, flagEmojiFromGid } from "../../runtime/countryFlags.js";
 import { readWorldState } from "../../runtime/gameState.js";
 import { requestDiplomaticChat } from "../GameUI/chat.jsx";
-import { generateCountryStats } from "../AI/gameplay.js";
+import { openCountryPanel } from "./CountryPanel.jsx";
 
 let _setSelection = null;
 let _currentSelection = null;
@@ -125,10 +125,6 @@ const RegionPopup = () => {
     const [dismissing, setDismissing] = useState(false);
     const [flagState, setFlagState] = useState(() => createFlagState());
     const [flagImageFailed, setFlagImageFailed] = useState(false);
-    const [statsOpen, setStatsOpen] = useState(false);
-    const [statsLoading, setStatsLoading] = useState(false);
-    const [statsText, setStatsText] = useState("");
-    const [statsError, setStatsError] = useState("");
     // Scenario polity registry (world.polityOverrides): era names + optional flags.
     const [polities, setPolities] = useState({});
     const { current: map } = useMap();
@@ -154,10 +150,6 @@ const RegionPopup = () => {
         setDismissing(false);
         setFlagState(value ? createFlagState("loading") : createFlagState());
         setFlagImageFailed(false);
-        setStatsOpen(false);
-        setStatsText("");
-        setStatsError("");
-        setStatsLoading(false);
         setSelection(value);
         if (value !== null) setAnimKey((key) => key + 1);
     };
@@ -176,35 +168,19 @@ const RegionPopup = () => {
         _dismiss?.();
     };
 
-    // Toggle an AI-generated intelligence briefing for the selected country.
-    const handleToggleStats = async () => {
-        if (statsOpen) {
-            setStatsOpen(false);
-            return;
-        }
-        setStatsOpen(true);
-        if (statsText || statsLoading) return;
+    // Open the full country panel (related events, aliases, owned regions,
+    // advisor report, diplomacy) for the selected owner.
+    const handleToggleStats = () => {
         const sel = _currentSelection;
-        setStatsLoading(true);
-        setStatsError("");
-        try {
-            const text = await generateCountryStats({
-                code: sel?.GID_0,
-                name: resolveSelectionName(sel),
-            });
-            setStatsText(text || "No information available.");
-        } catch (error) {
-            // Surface the real reason (rate limit, network, missing key...);
-            // nothing is cached on failure — closing and reopening retries.
-            const reason = error?.message ? String(error.message) : "";
-            setStatsError(
-                reason
-                    ? `Couldn't generate a briefing: ${reason} — close and reopen to retry.`
-                    : "Couldn't generate a briefing. Set an AI provider + key in Settings.",
-            );
-        } finally {
-            setStatsLoading(false);
-        }
+        if (!sel) return;
+        const flagInfo = resolveEraFlagInfo(sel.GID_0, polities[sel.GID_0]);
+        openCountryPanel({
+            code: sel.GID_0,
+            name: resolveSelectionName(sel),
+            flagUrl: flagInfo?.imageUrl || null,
+            flagEmoji: flagInfo?.emoji || null,
+        });
+        _dismiss?.();
     };
 
     _dismiss = () => setDismissing(true);
@@ -439,15 +415,6 @@ const RegionPopup = () => {
         </div>
         </div>
 
-        {statsOpen && (
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", marginTop: "8px", paddingTop: "8px", maxHeight: "190px", overflowY: "auto", fontSize: "11.5px", lineHeight: 1.55, color: "rgba(255,255,255,0.86)", whiteSpace: "pre-wrap" }}>
-        {statsLoading
-        ? "Generating intelligence briefing\u2026"
-        : statsError
-        ? <span style={{ color: "#f87171" }}>{statsError}</span>
-        : statsText}
-        </div>
-        )}
         </div>
         </div>
 
