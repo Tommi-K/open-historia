@@ -1,0 +1,93 @@
+# Commit Attribution
+
+All commits in this repository authored as **Nicholas Krol** (lungmap2dcc@gmail.com)
+were made by GitHub user [@Arkniem](https://github.com/Arkniem). The author email was
+not attached to the GitHub account at the time, so GitHub shows these commits without
+an account link. This file records the attribution for each of them:
+
+- Arkniem made commit `bd3b2d5` ("Fix country flags: restcountries API is deprecated") on June 30, 2026 at 23:57 -0400.
+- Arkniem made commit `3f5cfbd` ("Remove stray empty files") on July  1, 2026 at 00:08 -0400.
+- Arkniem made commit `4f04a2b` ("chore(build): add OpenLayers/polygon-clipping/turf deps, vendor-ol chunk, dev API proxy") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `2f23322` ("chore(assets): track large seed/generated geodata with Git LFS") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `03acc75` ("feat(editor): offline region-seed extractor (z5 pmtiles stitch) + world seed asset") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `d48806b` ("feat(editor): OpenLayers map surface, geometry ops (split/merge/lasso/dissolve), styling") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `c104f1c` ("feat(editor): document model, editor shell, managers (Types/Regions/Layers), toolbar, author field") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `d3583cb` ("feat(editor): city/POI extraction (70k cities) + Feature Manager with full-import") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `3a05d5b` ("feat(editor): server-side map-document persistence (/api/mapeditor CRUD)") on July  1, 2026 at 16:56 -0400.
+- Arkniem made commit `05bf706` ("docs(editor): MIT license (c) 2026 Nicholas Krol for the map editor") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `3c2c106` ("feat(editor): game-seed export (tier-1 re-ownership / tier-2 custom geometry) + creator credit") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `71a3dc6` ("feat(app): standalone map-editor mode behind a URL flag (?editor=1)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `54eae7f` ("feat(server): per-scenario regions.geojson asset, runtime serving, template world keys, seed-date hardening") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `8ec1390` ("feat(map): tier-2 custom-region rendering (fill/borders/click) + per-owner clustered labels") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `54039ab` ("feat(library): map editor embed, Apply & Play, scenario-faction country picker, troop-type controls") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `8db9d32` ("feat(selection): era polity names/flags, unclaimed territory, diplomatic chat, AI intel briefing") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `4d48900` ("feat(troops): pending deployments (translucent until AI confirms) + era-restricted troop types") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `712db3c` ("feat(ai): model reasoning toggle across all providers (Gemini/OpenAI/Anthropic/compatible)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `1ed0ee2` ("fix(ui): defensive timeline dates (no more Invalid Date/Undated)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `092349a` ("feat(ui): loading screen cycles era artwork + discrete image credit") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `5ac3a99` ("feat(presets): generator emits tier-2 geometry, owner codes, unit types, era covers") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `5c54399` ("feat(preset): Modern Day default scenario as tier-2 custom map + cover") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `62a4649` ("feat(preset): WWII 1939 — occupied China, Somaliland/Aden splits, satellites, tier-2 map + cover") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `4882a28` ("feat(preset): Medieval 1200 — accurate Rus'/steppe, Ghurids, Volga Bulgaria, SE Asia, tier-2 map + cover") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `4e1bc1f` ("feat(preset): Rome 117 AD — Trajan's empire at its zenith (new)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `4917a51` ("feat(preset): Mongol World 1300 — four khanates, vassal Rus', Ottoman origin (new)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `fa9c83c` ("feat(preset): New World 1650 — colonial empires and native nations (new)") on July  1, 2026 at 16:57 -0400.
+- Arkniem made commit `6ea4e5a` ("feat(hub): server proxy for GitHub-hosted scenario bundles (host-allowlisted)") on July  1, 2026 at 17:10 -0400.
+- Arkniem made commit `6c9a11d` ("feat(hub): Community tab — browse/vote/import shared scenarios, publish to the hub") on July  1, 2026 at 17:10 -0400.
+- Arkniem made commit `ddfe7ed` ("feat(hub): Netflix-style Community tab — Pinned shelf + Most Played / Most Liked / Most Recent rows") on July  1, 2026 at 17:18 -0400.
+- Arkniem made commit `bb6f4de` ("docs: fork install (LFS incl. editor seeds + world map), features, hub & preset docs; launcher fetches fork assets") on July  1, 2026 at 17:18 -0400.
+- Arkniem made commit `579dc14` ("feat(hub): verified Official badge — purple title + chip for hub-owner posts only") on July  1, 2026 at 17:24 -0400.
+- Arkniem made commit `383d061` ("refactor(ui): move Forces launcher into the bottom toolbar next to Chat and Actions") on July  1, 2026 at 17:24 -0400.
+- Arkniem made commit `96d601d` ("Base: troop system, WWII/Medieval preset groundwork, Windows launcher, tooling (re-submission of #17/#18/#19)") on July  1, 2026 at 17:52 -0400.
+- Arkniem made commit `b79a2b0` ("feat(tooling): one-click updater (Update Pax Historia.bat) — preserves saves, scenarios and map data") on July  2, 2026 at 09:00 -0400.
+- Arkniem made commit `b823438` ("feat(tooling): one-click updater (Update Pax Historia.bat) — preserves saves, scenarios and map data") on July  2, 2026 at 09:00 -0400.
+- Arkniem made commit `bc6cb9e` ("fix(map): crisp region borders on custom maps — paint stock tiles by ownership, GeoJSON only for drawn shapes") on July  2, 2026 at 10:06 -0400.
+- Arkniem made commit `4c720c4` ("chore(data): default scenario saved state — explicit troop-type defaults") on July  2, 2026 at 10:07 -0400.
+- Arkniem made commit `210cb1b` ("fix(map): crossfade custom-map fill — seed geometry zoomed out, stock tiles zoomed in") on July  2, 2026 at 10:11 -0400.
+- Arkniem made commit `1152b48` ("World border zoom fix") on July  2, 2026 at 10:18 -0400.
+- Arkniem made commit `59b44ee` ("feat(tooling): Linux/macOS launch and update scripts") on July  2, 2026 at 10:41 -0400.
+- Arkniem made commit `27b8fe8` ("feat(map): per-scenario custom cities — era city sets replace modern labels") on July  2, 2026 at 11:11 -0400.
+- Arkniem made commit `c330d4b` ("feat(editor): city tool — click to add, click a city to edit, inline popup") on July  2, 2026 at 11:11 -0400.
+- Arkniem made commit `2b6e187` ("feat(editor): place search — modern world places and custom places in one box") on July  2, 2026 at 11:11 -0400.
+- Arkniem made commit `dca8b63` ("feat(presets): era-accurate cities for all five official scenarios") on July  2, 2026 at 11:11 -0400.
+- Arkniem made commit `4fcbe4e` ("fix(editor): every owner gets its own color") on July  2, 2026 at 11:25 -0400.
+- Arkniem made commit `c11b60f` ("fix(editor): open the scenario's own map, not the default world") on July  2, 2026 at 11:25 -0400.
+- Arkniem made commit `fb90a71` ("fix(runtime): never cache a failed asset load for the whole session") on July  2, 2026 at 11:31 -0400.
+- Arkniem made commit `4ce6bc1` ("fix(ai): intelligence briefings get a real target dossier") on July  2, 2026 at 11:31 -0400.
+- Arkniem made commit `f1b3542` ("fix(preset): New World 1650 — no more gray Eurasia") on July  2, 2026 at 11:43 -0400.
+- Arkniem made commit `9110d81` ("feat(preset): Bronze Age — 1200 BC, the eve of the Collapse") on July  2, 2026 at 11:43 -0400.
+- Arkniem made commit `7f320cc` ("fix(map): Russia is green, not placeholder gray") on July  2, 2026 at 11:48 -0400.
+- Arkniem made commit `7d44f37` ("feat(hub): real install counts — bundles are release assets, downloads are counted") on July  2, 2026 at 11:57 -0400.
+- Arkniem made commit `83b2dd2` ("feat(hub): Official badge covers all hub collaborators; document collaborator-only pinning") on July  2, 2026 at 12:11 -0400.
+- Arkniem made commit `f5439a7` ("feat(mobile): phone-friendly UI + Termux hosting support") on July  2, 2026 at 12:47 -0400.
+- Arkniem made commit `ca1c77d` ("fix(ui): usable panel heights on small laptops; editor search moves into the bottom bar") on July  2, 2026 at 12:57 -0400.
+- Arkniem made commit `3595a00` ("feat(map): every scenario renders the custom map style; AI knows drawn-region names") on July  2, 2026 at 13:14 -0400.
+- Arkniem made commit `c19f63b` ("feat(android): thin APK — a WebView app that connects to your server") on July  2, 2026 at 13:14 -0400.
+- Arkniem made commit `9053e1b` ("feat(ui): exit button — shut the server down from the top bar") on July  2, 2026 at 13:25 -0400.
+- Arkniem made commit `e33408b` ("feat(android): one-click install — CI-built APK on a rolling release, zero-setup first launch") on July  2, 2026 at 13:34 -0400.
+- Arkniem made commit `a9e70d2` ("feat(android): self-updating app + the game logo as its icon") on July  2, 2026 at 13:44 -0400.
+- Arkniem made commit `033de42` ("fix(library): no more undeletable built-in game") on July  2, 2026 at 13:59 -0400.
+- Arkniem made commit `5341a04` ("fix(android): app couldn't connect — CORS headers on the API, http scheme in the app") on July  2, 2026 at 14:25 -0400.
+- Arkniem made commit `556638b` ("fix(ai): relay OpenAI-style calls through the game server — self-hosted endpoints work") on July  2, 2026 at 15:01 -0400.
+- Arkniem made commit `7eefedc` ("fix(android): update screen no longer strands the app; visible build number") on July  2, 2026 at 15:20 -0400.
+- Arkniem made commit `1ae13f6` ("fix(android): probe the server with native HTTP — the WebView blocks loopback fetches") on July  2, 2026 at 15:38 -0400.
+- Arkniem made commit `ca0e20d` ("fix(ui): advisor panel gets a close button — the drawer covers its own launcher on phones") on July  2, 2026 at 15:38 -0400.
+- Arkniem made commit `c3319ee` ("fix(server): say why startup failed when the port is taken") on July  2, 2026 at 15:42 -0400.
+- Arkniem made commit `8d77959` ("fix(ui): advisor drawer actually closes — its closed position was invalid CSS") on July  2, 2026 at 15:48 -0400.
+- Arkniem made commit `2ed9c4a` ("fix(ai): stop silently discarding slow AI turns — real timeouts, loud fallbacks") on July  2, 2026 at 15:49 -0400.
+- Arkniem made commit `0a28155` ("fix(ai): an empty AI turn no longer counts as success") on July  2, 2026 at 15:54 -0400.
+- Arkniem made commit `37bf7a9` ("fix(android): the app's internal origin collided with the game server") on July  2, 2026 at 16:01 -0400.
+- Arkniem made commit `1c13c7f` ("fix(ai): empty suggestion answers take the fallback instead of 'no suggestions'") on July  2, 2026 at 16:11 -0400.
+- Arkniem made commit `6dc0147` ("fix(library): playing with zero games auto-creates the session instead of failing every save") on July  2, 2026 at 16:17 -0400.
+- Arkniem made commit `5a6bccb` ("fix(mobile): country name sits beside the date instead of covering it") on July  2, 2026 at 16:43 -0400.
+- Arkniem made commit `ab839d4` ("chore(credits): copyright headers on all files with Nicholas Krol contributions") on July  2, 2026 at 17:00 -0400.
+- Arkniem made commit `f66b438` ("fix(mobile): advisor drawer overlays the HUD so buttons can't cover it") on July  2, 2026 at 17:00 -0400.
+- Arkniem made commit `38d360e` ("feat(i18n): 200+ language support — AI-translated UI, scenarios, and replies") on July  2, 2026 at 17:13 -0400.
+- Arkniem made commit `3fa6b63` ("feat(i18n): language saved on the server, top-50 curated list, fuller translation coverage") on July  2, 2026 at 17:40 -0400.
+- Arkniem made commit `2b339f1` ("feat(game): new-game dialog gains an emoji difficulty step that steers the AI") on July  2, 2026 at 17:40 -0400.
+- Arkniem made commit `fbcab64` ("feat(cheats): cheats menu — Master AI, annexation by click, country/region/feature/event editing") on July  2, 2026 at 17:40 -0400.
+- Arkniem made commit `4353130` ("feat(ui): country info button opens a full panel — events, aliases, regions, advisor report, diplomacy") on July  2, 2026 at 17:58 -0400.
+- Arkniem made commit `319c2a2` ("feat: rename Pax Historia to Open Historia") on July  2, 2026 at 17:58 -0400.
+- Arkniem made commit `7f54fbe` ("feat(i18n): pre-translate everything once per language instead of live-swapping") on July  2, 2026 at 17:58 -0400.
+- Arkniem made commit `439d32d` ("feat(military): era- and type-aware reach for deployments, moves and attacks") on July  2, 2026 at 18:37 -0400.
+- Arkniem made commit `f6119a8` ("feat(i18n): shipped + server-saved language packs, translated map labels, no-stall startup") on July  2, 2026 at 18:37 -0400.
