@@ -914,36 +914,51 @@ export const generateActionSuggestions = async ({ force = true } = {}) => {
     variables,
   });
 
-  const topics = normalizeArray(payload?.topics)
-    .map((topic, topicIndex) => {
-      if (!topic || typeof topic !== "object") {
-        return null;
-      }
+  const normalizeTopics = (raw) =>
+    normalizeArray(raw)
+      .map((topic, topicIndex) => {
+        if (!topic || typeof topic !== "object") {
+          return null;
+        }
 
-      const title = normalizeString(topic.title || topic.name);
-      if (!title) {
-        return null;
-      }
+        const title = normalizeString(topic.title || topic.name);
+        if (!title) {
+          return null;
+        }
 
-      return {
-        actions: normalizeArray(topic.actions)
-          .map((action, actionIndex) =>
-            normalizeActionEntry(
-              {
-                ...action,
-                source: "suggested",
-                suggestionTopic: title,
-              },
-              actionIndex,
-            ),
-          )
-          .filter(Boolean),
-        description: normalizeString(topic.description),
-        id: normalizeString(topic.id) || `topic-${topicIndex}`,
-        title,
-      };
-    })
-    .filter(Boolean);
+        return {
+          actions: normalizeArray(topic.actions)
+            .map((action, actionIndex) =>
+              normalizeActionEntry(
+                {
+                  ...action,
+                  source: "suggested",
+                  suggestionTopic: title,
+                },
+                actionIndex,
+              ),
+            )
+            .filter(Boolean),
+          description: normalizeString(topic.description),
+          id: normalizeString(topic.id) || `topic-${topicIndex}`,
+          title,
+        };
+      })
+      .filter(Boolean);
+
+  // Models told "JSON only" mislabel or wrap the list — accept the common
+  // shapes (top-level array, topics, suggestions) before giving up.
+  let topics = normalizeTopics(
+    Array.isArray(payload) ? payload : payload?.topics ?? payload?.suggestions,
+  );
+
+  // A parseable-but-EMPTY answer used to be accepted as "no suggestions were
+  // generated" — the deterministic fallback (which always has topics) now
+  // covers it, same as empty timeline turns.
+  if (topics.length === 0) {
+    console.warn("[ai] action suggestions came back empty — using the deterministic fallback.");
+    topics = normalizeTopics((await fallbackActionSuggestions(bundle))?.topics);
+  }
 
   const world = normalizeWorldState(await readWorldState());
   world.actionSuggestions = topics;
