@@ -1,3 +1,4 @@
+/*! Pax Historia — portions (defensive date rendering) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import dayjs from "dayjs";
@@ -1182,10 +1183,19 @@ const DateWidget = ({
     ? latestTurnRecord.events[Math.min(Math.max(visibleEventCount, 1), totalVisibleEvents) - 1]
     : null;
 
-    const displayDate = gameData
-    ? dayjs(gameData.gameDate).format("MMMM Do, YYYY")
-    : "Loading...";
-    const currentDate = gameData?.gameDate ?? dayjs().format("YYYY-MM-DD");
+    // Resolve a valid date defensively: gameDate, else startDate, else nothing.
+    // dayjs("") / dayjs(null) is an Invalid Date, so guard before formatting.
+    const rawGameDate = gameData?.gameDate || gameData?.startDate || "";
+    const parsedGameDate = rawGameDate ? dayjs(rawGameDate) : null;
+    const hasValidGameDate = Boolean(parsedGameDate && parsedGameDate.isValid());
+    const displayDate = !gameData
+    ? "Loading..."
+    : hasValidGameDate
+    ? parsedGameDate.format("MMMM Do, YYYY")
+    : "Undated";
+    const currentDate = hasValidGameDate
+    ? parsedGameDate.format("YYYY-MM-DD")
+    : dayjs().format("YYYY-MM-DD");
 
     useEffect(() => {
         setVisibleEventCount(1);

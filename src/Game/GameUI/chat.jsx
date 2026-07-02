@@ -654,7 +654,14 @@ const ChatListItem = ({ chat, onClick, onDelete }) => {
 
 // ── Main ChatPanel ────────────────────────────────────────────────────────────
 
-const ChatPanel = ({ isOpen, onClose }) => {
+// Bridge so the map region popup can request a diplomatic chat with a country.
+const _chatOpenSubs = new Set();
+export const requestDiplomaticChat = (country) => {
+    if (!country || !country.name) return;
+    _chatOpenSubs.forEach((fn) => { try { fn(country); } catch { /* noop */ } });
+};
+
+const ChatPanel = ({ isOpen, onClose, requestedCountry, onConsumeRequest }) => {
     const [countries, setCountries]               = useState([]);
     const [loadingCountries, setLoadingCountries] = useState(true);
     const [playerCountry, setPlayerCountry]       = useState("your nation");
@@ -732,6 +739,30 @@ const ChatPanel = ({ isOpen, onClose }) => {
         if (activeChat?.id === id) setActiveChat(null);
     };
 
+    // Open (or reuse) a 1-on-1 chat with a country requested from the region popup.
+    const consumePending = (country) => {
+        setShowSelector(false);
+        setChats(prev => {
+            const existing = prev.find(
+                c => Array.isArray(c.countries) && c.countries.length === 1 &&
+                     (c.countries[0]?.name || "").toLowerCase() === country.name.toLowerCase(),
+            );
+            if (existing) { setActiveChat(existing); return prev; }
+            const newChat = { id: Date.now(), countries: [{ name: country.name, code: country.code || "" }], messages: [] };
+            const u = [newChat, ...prev];
+            saveAllChats(u);
+            setActiveChat(newChat);
+            return u;
+        });
+    };
+
+    useEffect(() => {
+        if (!isOpen || !requestedCountry) return;
+        consumePending(requestedCountry);
+        onConsumeRequest?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, requestedCountry]);
+
         return (
             <>
             <MarkdownStyleInjector />
@@ -772,14 +803,24 @@ const ChatPanel = ({ isOpen, onClose }) => {
 
 const Chat = ({ hovered, setHovered, isOpen, onToggle }) => {
     const [hasOpened, setHasOpened] = useState(false);
+    const [pendingCountry, setPendingCountry] = useState(null);
     const setChatOpen = () => { onToggle(); };
 
     useEffect(() => {
         if (isOpen) setHasOpened(true);
     }, [isOpen]);
+
+    useEffect(() => {
+        const handler = (country) => {
+            setPendingCountry(country);
+            if (!isOpen) onToggle();
+        };
+        _chatOpenSubs.add(handler);
+        return () => _chatOpenSubs.delete(handler);
+    }, [isOpen, onToggle]);
         return (
             <>
-            {hasOpened && <ChatPanel isOpen={isOpen} onClose={onToggle} />}
+            {hasOpened && <ChatPanel isOpen={isOpen} onClose={onToggle} requestedCountry={pendingCountry} onConsumeRequest={() => setPendingCountry(null)} />}
             <button title="Chat" style={{ width: "3.3rem", height: "3.3rem", borderRadius: "10px", border: hovered ? "1px solid rgba(255,255,255,0.2)" : isOpen ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)", background: isOpen ? "linear-gradient(145deg,rgba(109,40,217,0.4),rgba(76,29,149,0.4))" : hovered ? "linear-gradient(145deg,rgba(40,55,80,0.95),rgba(20,30,50,0.95))" : "linear-gradient(145deg,rgba(30,42,65,0.95),rgba(15,22,40,0.95))", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.12s ease", boxShadow: hovered ? "inset 0 1px 0 rgba(255,255,255,0.1),0 2px 8px rgba(0,0,0,0.4)" : "inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.3),0 2px 6px rgba(0,0,0,0.35)", fontSize: "1.2rem", outline: "none", transform: hovered ? "translateY(-1px)" : "translateY(0)", color: "white", fontFamily: "sans-serif", flexShrink: 0 }}
             onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
             onClick={() => setChatOpen(o => !o)}>💬</button>
@@ -789,13 +830,18 @@ const Chat = ({ hovered, setHovered, isOpen, onToggle }) => {
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
-const Toolbar = memo(({ onOpenAdvisor, activePanel, onTogglePanel }) => {
+const Toolbar = memo(({ onOpenAdvisor, activePanel, onTogglePanel, forcesOpen = false, onToggleForces }) => {
     const [hoveredChat, setHoveredChat]       = useState(false);
     const [hoveredActions, setHoveredActions] = useState(false);
+    const [hoveredForces, setHoveredForces]   = useState(false);
     return (
-        <div style={{ position: "fixed", bottom: "0.5rem", left: "0.5rem", height: "4rem", width: "8.5rem", gap: "0.75rem", padding: "0 0.1rem", backgroundColor: "rgba(17,24,39,0.9)", backdropFilter: "blur(4px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontFamily: "sans-serif", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 8px 24px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+        <div style={{ position: "fixed", bottom: "0.5rem", left: "0.5rem", height: "4rem", width: "12.5rem", gap: "0.75rem", padding: "0 0.1rem", backgroundColor: "rgba(17,24,39,0.9)", backdropFilter: "blur(4px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontFamily: "sans-serif", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 8px 24px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <Chat hovered={hoveredChat} setHovered={setHoveredChat} isOpen={activePanel === "chat"} onToggle={() => onTogglePanel("chat")} />
         <Actions onOpenAdvisor={onOpenAdvisor} hovered={hoveredActions} setHovered={setHoveredActions} isOpen={activePanel === "actions"} onToggle={() => onTogglePanel("actions")} />
+        {/* Forces — same launcher style as its toolbar siblings; panel lives in forces.jsx */}
+        <button title="Forces" style={{ width: "3.3rem", height: "3.3rem", borderRadius: "10px", border: hoveredForces ? "1px solid rgba(255,255,255,0.2)" : forcesOpen ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)", background: forcesOpen ? "linear-gradient(145deg,rgba(109,40,217,0.4),rgba(76,29,149,0.4))" : hoveredForces ? "linear-gradient(145deg,rgba(40,55,80,0.95),rgba(20,30,50,0.95))" : "linear-gradient(145deg,rgba(30,42,65,0.95),rgba(15,22,40,0.95))", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.12s ease", boxShadow: hoveredForces ? "inset 0 1px 0 rgba(255,255,255,0.1),0 2px 8px rgba(0,0,0,0.4)" : "inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.3),0 2px 6px rgba(0,0,0,0.35)", fontSize: "1.2rem", outline: "none", transform: hoveredForces ? "translateY(-1px)" : "translateY(0)", color: "white", fontFamily: "sans-serif", flexShrink: 0 }}
+        onMouseEnter={() => setHoveredForces(true)} onMouseLeave={() => setHoveredForces(false)}
+        onClick={() => onToggleForces?.()}>⚔️</button>
         </div>
     );
 });

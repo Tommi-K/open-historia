@@ -30,6 +30,14 @@ import {
   uploadScenarioAsset,
   writeRuntimeJsonAsset,
 } from "./libraryStore.js";
+import {
+  createMapEditorDocument,
+  deleteMapEditorDocument,
+  ensureMapEditorStore,
+  getMapEditorCatalog,
+  getMapEditorDocument,
+  updateMapEditorDocument,
+} from "./mapEditorStore.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const app = express();
@@ -42,6 +50,7 @@ const uploadParser = express.raw({ type: () => true, limit: "2048mb" });
 
 ensureScenarioStore();
 ensureGameStore();
+ensureMapEditorStore();
 
 const sendError = (res, statusCode, error) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -328,6 +337,85 @@ app.head("/api/runtime/pmtiles/:assetKey", (req, res) => {
     res.status(200).end();
   } catch (error) {
     sendError(res, 404, error);
+  }
+});
+
+// ---- Scenario Hub --------------------------------------------------------
+// Downloads a scenario bundle from the community hub on the browser's behalf —
+// GitHub file attachments don't send CORS headers, so the client can't fetch
+// them directly. Locked to GitHub hosts; nothing else is proxied.
+const HUB_DOWNLOAD_HOSTS = new Set([
+  "github.com",
+  "raw.githubusercontent.com",
+  "objects.githubusercontent.com",
+  "user-images.githubusercontent.com",
+  "user-attachments.githubusercontent.com",
+]);
+const HUB_MAX_BUNDLE_BYTES = 200 * 1024 * 1024;
+
+app.get("/api/hub/file", async (req, res) => {
+  try {
+    const target = new URL(String(req.query.url ?? ""));
+    if (target.protocol !== "https:" || !HUB_DOWNLOAD_HOSTS.has(target.hostname)) {
+      return sendError(res, 400, new Error("Only GitHub-hosted scenario files can be fetched."));
+    }
+
+    const upstream = await fetch(target, { redirect: "follow" });
+    if (!upstream.ok) {
+      return sendError(res, 502, new Error(`Hub file fetch failed (HTTP ${upstream.status}).`));
+    }
+
+    const text = await upstream.text();
+    if (text.length > HUB_MAX_BUNDLE_BYTES) {
+      return sendError(res, 413, new Error("Scenario bundle is too large."));
+    }
+
+    res.setHeader("Cache-Control", "no-store");
+    res.type("application/json");
+    res.send(text);
+  } catch (error) {
+    sendError(res, 502, error);
+  }
+});
+
+// ---- Map editor documents ------------------------------------------------
+app.get("/api/mapeditor/documents", (_req, res) => {
+  try {
+    res.json(getMapEditorCatalog());
+  } catch (error) {
+    sendError(res, 500, error);
+  }
+});
+
+app.post("/api/mapeditor/documents", largeJsonParser, (req, res) => {
+  try {
+    res.status(201).json(createMapEditorDocument(req.body ?? {}));
+  } catch (error) {
+    sendError(res, 400, error);
+  }
+});
+
+app.get("/api/mapeditor/documents/:id", (req, res) => {
+  try {
+    res.json(getMapEditorDocument(req.params.id));
+  } catch (error) {
+    sendError(res, 404, error);
+  }
+});
+
+app.put("/api/mapeditor/documents/:id", largeJsonParser, (req, res) => {
+  try {
+    res.json(updateMapEditorDocument(req.params.id, req.body ?? {}));
+  } catch (error) {
+    sendError(res, 400, error);
+  }
+});
+
+app.delete("/api/mapeditor/documents/:id", (req, res) => {
+  try {
+    res.json(deleteMapEditorDocument(req.params.id));
+  } catch (error) {
+    sendError(res, 400, error);
   }
 });
 

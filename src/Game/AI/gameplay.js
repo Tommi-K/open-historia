@@ -402,6 +402,25 @@ const resolveHelperValues = (helperTemplates, variables) => {
   return resolved;
 };
 
+const buildUnitsSummaryText = (world) => {
+  const units = normalizeArray(world?.units);
+  if (units.length === 0) {
+    return "No military units are currently deployed on the map.";
+  }
+
+  return units
+    .slice(0, 60)
+    .map((unit) => {
+      const lat = Number(unit.lat);
+      const lng = Number(unit.lng);
+      const coords = Number.isFinite(lat) && Number.isFinite(lng)
+        ? `lat ${lat.toFixed(2)}, lng ${lng.toFixed(2)}`
+        : "unknown location";
+      return `- ${unit.name} [id ${unit.id}] (${unit.type}, owner ${unit.ownerCode}, strength ${unit.strength}, status ${unit.status}) at ${coords}${unit.regionId ? `, region ${unit.regionId}` : ""}`;
+    })
+    .join("\n");
+};
+
 const buildTemplateVariables = async (
   bundle,
   {
@@ -459,7 +478,8 @@ const buildTemplateVariables = async (
     numberOfRegions: String(regionCatalog.length),
     plannedActions: buildActionHistoryText(bundle.actions),
     playerPolity: bundle.game.country || "Unknown polity",
-    playerBattalionSummaries: "No battalion summary data is currently available in the lightweight runtime.",
+    playerBattalionSummaries: buildUnitsSummaryText(bundle.world),
+    unitsSummary: buildUnitsSummaryText(bundle.world),
     playerPolityRegions: await buildPlayerPolityRegionsText(bundle),
     recentEvents,
     recentEventsLong: buildEventHistoryText(bundle.events, { limit: 24 }),
@@ -925,6 +945,29 @@ export const generateActionSuggestions = async ({ force = true } = {}) => {
   await writeWorldState(world);
 
   return topics;
+};
+
+// Freeform AI intelligence briefing on a specific country/polity, grounded in the
+// current world state. Returned as plain-text bullet points for the region popup.
+export const generateCountryStats = async ({ code, name } = {}) => {
+  const bundle = await readGameStateBundle({ force: true });
+  const variables = await buildTemplateVariables(bundle);
+  const target = name || code || "the polity";
+  const playerPolity = variables.playerPolity || bundle?.game?.country || "the player";
+  const system =
+    `You are the intelligence advisor in an alternate-history strategy game. ` +
+    `The current date is ${variables.date || "unknown"}. The player leads ${playerPolity}. ` +
+    `Give a concise intelligence briefing on ${target}${code ? ` (code ${code})` : ""} using ONLY the world state below. ` +
+    `Cover government/leadership, territory & key regions, military strength, economy, and diplomatic posture toward ${playerPolity}. ` +
+    `Be specific and grounded; if something is unknown, say so briefly.\n\n` +
+    `WORLD STATE:\n${variables.worldSummary || variables.grandMapDescription || "(no summary)"}\n\n` +
+    `RECENT EVENTS:\n${variables.recentEvents || "(none)"}\n\n` +
+    `MILITARY:\n${variables.unitsSummary || variables.playerBattalionSummaries || "(none)"}\n\n` +
+    `Respond in ${variables.language || "English"} as 4-6 short bullet points, each prefixed with "- ". No preamble, no closing remarks.`;
+  const raw = await callAI(system, [
+    { role: "user", parts: [{ text: `Give me the intelligence briefing on ${target}.` }] },
+  ]);
+  return String(raw || "").trim();
 };
 
 export const refinePlayerAction = async (rawInput, { persist = true } = {}) => {
