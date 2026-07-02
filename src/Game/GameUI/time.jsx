@@ -17,6 +17,7 @@ import {
     readGameData,
     readWorldState,
 } from "../../runtime/gameState.js";
+import { useIsMobile } from "../../runtime/useIsMobile.js";
 
 dayjs.extend(advancedFormat);
 
@@ -1039,6 +1040,7 @@ const DateWidget = ({
     const [error, setError] = useState("");
     const [visibleEventCount, setVisibleEventCount] = useState(1);
     const openPanel = typeof onSetPanel === "function" ? activePanel : localOpenPanel;
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         ensureTimelineStyles();
@@ -1188,13 +1190,15 @@ const DateWidget = ({
     // dayjs("") / dayjs(null) is an Invalid Date, so guard before formatting.
     // Dates dayjs can't parse but that ARE text ("1200 BCE", ancient-era
     // scenarios) display verbatim instead of "Undated".
+    const playerCountry = gameData?.country || "";
     const rawGameDate = gameData?.gameDate || gameData?.startDate || "";
     const parsedGameDate = rawGameDate ? dayjs(rawGameDate) : null;
     const hasValidGameDate = Boolean(parsedGameDate && parsedGameDate.isValid());
+    // Mobile shares the row with the country name, so abbreviate the month.
     const displayDate = !gameData
     ? "Loading..."
     : hasValidGameDate
-    ? parsedGameDate.format("MMMM Do, YYYY")
+    ? parsedGameDate.format(isMobile && playerCountry ? "MMM Do, YYYY" : "MMMM Do, YYYY")
     : String(rawGameDate).trim() || "Undated";
     const currentDate = hasValidGameDate
     ? parsedGameDate.format("YYYY-MM-DD")
@@ -1256,6 +1260,9 @@ const DateWidget = ({
             ...widgetSurface,
             right: rightShift,
             top: topOffset,
+            // On phones the country name moves in here (the standalone pill
+            // would cover the date), so stretch up to the settings button.
+            ...(isMobile ? { width: "min(24rem, calc(100vw - 5.75rem))" } : null),
         }}
         >
         <button
@@ -1280,9 +1287,32 @@ const DateWidget = ({
         </button>
 
         <div style={{ alignItems: "center", display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
-        <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.95rem", letterSpacing: "0.02em" }}>
-        {displayDate}
-        </div>
+        {isMobile && playerCountry ? (
+            <div style={{ alignItems: "baseline", display: "flex", gap: "0.5rem", justifyContent: "center", maxWidth: "100%", minWidth: 0 }}>
+            <span
+            style={{
+                color: "rgba(147,197,253,0.88)",
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap",
+            }}
+            >
+            {playerCountry}
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.94)", flexShrink: 0, fontSize: "0.82rem", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+            {displayDate}
+            </span>
+            </div>
+        ) : (
+            <div style={{ color: "rgba(255,255,255,0.94)", fontSize: "0.95rem", letterSpacing: "0.02em" }}>
+            {displayDate}
+            </div>
+        )}
         </div>
 
         <button
