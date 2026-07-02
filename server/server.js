@@ -48,6 +48,21 @@ const jsonParser = express.json({ limit: "64mb" });
 const largeJsonParser = express.json({ limit: "2048mb" });
 const uploadParser = express.raw({ type: () => true, limit: "2048mb" });
 
+// The Android app's connect screen lives on the WebView's own origin, so its
+// probe of this server is a cross-origin request — without these headers the
+// phone blocks it (CORS) and the app can never connect. This is a personal
+// game server whose whole API is open to whoever can reach it, so a blanket
+// allow changes nothing security-wise.
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 ensureScenarioStore();
 ensureGameStore();
 ensureMapEditorStore();
