@@ -15,6 +15,7 @@ import {
   TERRAIN_TILE_TEMPLATE,
   ensureBasemapProtocol,
 } from "../../runtime/assets.js";
+import { SKYBOX_SIZE, getSkyboxUrl } from "./skybox.js";
 
 // The high-res source goes through the ohbase protocol so ESRI's "Map Data
 // Not Yet Available" placeholders get replaced with upscaled ancestor tiles.
@@ -99,100 +100,6 @@ const WORLD_STYLE = {
   },
 };
 
-// Procedural starfield, generated once and reused as a repeating background
-// behind the transparent space around the globe.
-const buildStarfieldDataUrl = () => {
-  if (typeof document === "undefined") return "";
-  const size = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, size, size);
-  // Deterministic pseudo-random so every load gets the same sky.
-  let seed = 1337;
-  const rand = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
-  for (let i = 0; i < 180; i += 1) {
-    const x = rand() * size;
-    const y = rand() * size;
-    const magnitude = rand();
-    const radius = magnitude < 0.92 ? 0.6 + rand() * 0.6 : 1.2 + rand() * 1.1;
-    const alpha = 0.25 + rand() * 0.75;
-    const tint = rand();
-    ctx.fillStyle = tint < 0.75
-      ? `rgba(255,255,255,${alpha})`
-      : tint < 0.9
-        ? `rgba(190,214,255,${alpha})`
-        : `rgba(255,232,196,${alpha})`;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  return canvas.toDataURL("image/png");
-};
-
-let starfieldUrl = "";
-const getStarfieldUrl = () => {
-  if (!starfieldUrl) starfieldUrl = buildStarfieldDataUrl();
-  return starfieldUrl;
-};
-
-// The sun: a glow whose screen position GlobeEffects drives from the sun's
-// WORLD longitude versus the camera — pan around the earth and it slides
-// across the sky, sets behind the globe, and rises again. The map canvas
-// paints over it wherever the globe is, so it only shines through space.
-const SunGlow = () => (
-  <div
-    id="oh-sun-glow"
-    aria-hidden
-    style={{
-      position: "absolute",
-      top: "-30rem",
-      left: "-30rem",
-      width: "22rem",
-      height: "22rem",
-      borderRadius: "50%",
-      pointerEvents: "none",
-      // Above the canvas: MapLibre's globe atmosphere paints space with a
-      // dark wash that would crush the soft glow. GlobeEffects fades it out
-      // whenever it would sit in front of the earth or behind the camera.
-      zIndex: 5,
-      background:
-        "radial-gradient(circle, rgba(255,252,240,1) 0%, rgba(255,238,180,0.9) 7%, " +
-        "rgba(255,214,120,0.5) 16%, rgba(255,190,90,0.18) 34%, rgba(255,180,80,0) 62%)",
-    }}
-  />
-);
-
-// Sun-facing atmosphere: a soft ring hugging the globe's silhouette, masked
-// so it burns brightest toward the sun and thins to a faint band on the
-// night side. GlobeEffects sizes, aims and fades it every frame.
-const AtmosphereGlow = () => (
-  <div
-    id="oh-atmo-glow"
-    aria-hidden
-    style={{
-      position: "absolute",
-      left: "-200vmax",
-      top: 0,
-      borderRadius: "50%",
-      pointerEvents: "none",
-      opacity: 0,
-      // The div is sized 1.1× the globe's diameter; the bright band sits at
-      // 91-96% of the div radius = just OUTSIDE the globe's silhouette, with
-      // a broad soft haze bleeding outward past it.
-      background:
-        "radial-gradient(circle, rgba(0,0,0,0) 0 82%, rgba(150,200,255,0.2) 88%, " +
-        "rgba(190,225,255,0.9) 91.5%, rgba(160,205,255,0.7) 94%, rgba(115,165,250,0.38) 96.5%, " +
-        "rgba(85,135,245,0.16) 98.5%, rgba(0,0,0,0) 100%)",
-    }}
-  />
-);
-
 function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
   const hasReportedInitialIdleRef = useRef(false);
   const isGlobe = projection === "globe";
@@ -213,6 +120,11 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
   }, [onInitialIdle]);
 
   return (
+    // The skybox: one panoramic image (stars + nebula + THE SUN) behind the
+    // transparent space around the globe. GlobeEffects scrolls it so the
+    // baked sun stays aligned with the sunlit side of the earth; the map
+    // canvas paints over it wherever the globe is, so the earth occludes
+    // the sun naturally.
     <div
       id="oh-globe-space"
       style={{
@@ -221,11 +133,11 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         backgroundColor: "#000",
         position: "relative",
         overflow: "hidden",
-        backgroundImage: isGlobe ? `url(${getStarfieldUrl()})` : "none",
-        backgroundRepeat: "repeat",
+        backgroundImage: isGlobe ? `url(${getSkyboxUrl()})` : "none",
+        backgroundRepeat: "repeat-x",
+        backgroundSize: `${SKYBOX_SIZE}px ${SKYBOX_SIZE}px`,
       }}
     >
-      {isGlobe && <SunGlow />}
       <Map
         ref={mapRef}
         initialViewState={{
@@ -263,7 +175,6 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         <CountryInfoPanel />
         <UnitPopup />
       </Map>
-      {isGlobe && <AtmosphereGlow />}
     </div>
   );
 }

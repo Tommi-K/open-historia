@@ -1,6 +1,7 @@
-/*! Open Historia — globe sun, day/night terminator + rotation © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+/*! Open Historia — globe skybox alignment, day/night terminator + orbit © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
 import React, { useEffect, useMemo, useState } from "react";
 import { Source, Layer, useMap } from "react-map-gl/maplibre";
+import { SKYBOX_SIZE, SKYBOX_SUN_U } from "./skybox.js";
 
 // The camera orbits the earth once every 10 minutes.
 const ROTATION_DEG_PER_MS = 360 / (10 * 60 * 1000);
@@ -12,9 +13,11 @@ const DAY_LIMIT_DEG = 78;
 const NIGHT_LIMIT_DEG = 102;
 const NIGHT_OPACITY = 0.76;
 const RAMP_STEP_DEG = 0.5;
-// Star parallax: scaled so a full 360° wrap of the camera longitude shifts
-// the 512px star tile by exactly two tiles — no snap when the value wraps.
-const STAR_PX_PER_DEG = 1024 / 360;
+// The skybox strip spans exactly 360° of azimuth, so a full wrap of the
+// camera longitude scrolls it exactly one tile — no snap at the antimeridian.
+const SKYBOX_PX_PER_DEG = SKYBOX_SIZE / 360;
+// Vertical drift of the sky when the camera pans in latitude.
+const SKYBOX_PX_PER_LAT_DEG = 2;
 
 const NIGHT_LAYER_ID = "globe-night";
 
@@ -83,8 +86,8 @@ const GlobeEffects = ({ active }) => {
     if (!active || !map) return undefined;
     const mapInstance = map.getMap?.() ?? map;
 
-    // First activation: put the sun 55° east of wherever the camera starts,
-    // matching its on-screen glow at the upper right. After that it free-runs.
+    // First activation: fix the sun 55° east of wherever the camera starts —
+    // the skybox sun rises at the upper right, the lit hemisphere faces it.
     if (sunWorldLng == null) {
       sunWorldLng = normalizeLng(mapInstance.getCenter().lng + 55);
     }
@@ -100,79 +103,26 @@ const GlobeEffects = ({ active }) => {
     const interactionEvents = ["dragstart", "zoomstart", "rotatestart", "pitchstart", "wheel"];
     for (const event of interactionEvents) mapInstance.on(event, markInteraction);
 
-    // --- Screen-space visuals: the sun glow, the starfield and the
-    // sun-facing atmosphere rim all live outside the WebGL canvas. They are
-    // driven from here (plain DOM writes — no React re-render per frame) so
-    // they track BOTH camera movement and the sun's own drift.
+    // --- The skybox is the whole sky: stars, nebula and the sun in one
+    // panoramic strip behind the canvas. Scrolling it keeps the baked sun
+    // aligned with the sunlit side of the earth; the globe occludes it
+    // naturally, so there is nothing else to mask, fade or aim. Plain DOM
+    // writes — no React re-render per frame.
     const syncVisuals = () => {
+      const space = document.getElementById("oh-globe-space");
+      if (!space) return;
       const canvas = mapInstance.getCanvas();
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       const center = mapInstance.getCenter();
-      const zoom = mapInstance.getZoom();
       // Where is the sun relative to the camera? 0 = dead ahead.
       const delta = normalizeLng((sunWorldLng ?? 0) - center.lng);
-
-      // Stars are pinned to the world frame: orbiting the camera slides them
-      // across the view in lockstep with the countries and the night shadow.
-      const space = document.getElementById("oh-globe-space");
-      if (space) {
-        space.style.backgroundPosition =
-          `${(-center.lng * STAR_PX_PER_DEG).toFixed(1)}px ${(center.lat * STAR_PX_PER_DEG).toFixed(1)}px`;
-      }
-
-      // The globe's rendered silhouette radius: the 0.74 fudge matches the
-      // limb measured on screen (constant across zooms — fixed camera FOV).
-      const globeRadius = ((512 * 2 ** zoom) / (2 * Math.PI)) * 0.74;
-
-      // The sun: horizontal position from its bearing off the view axis.
-      const sun = document.getElementById("oh-sun-glow");
-      const sunSize = sun ? sun.offsetWidth : 0;
-      const sunX = width * (0.5 + delta / 160);
-      const sunY = height * 0.16;
-      if (sun) {
-        const sunLeft = sunX - sunSize / 2;
-        const sunTop = sunY - sunSize / 2;
-        sun.style.left = `${sunLeft.toFixed(0)}px`;
-        sun.style.top = `${sunTop.toFixed(0)}px`;
-        // Eclipse, not fade: the earth's disk is a hard hole punched in the
-        // glow's own mask, so the sun is cut off by the limb as it slides
-        // behind the planet — and hidden entirely when the camera looks
-        // straight down at the surface from a deep zoom.
-        const holeX = width / 2 - sunLeft;
-        const holeY = height / 2 - sunTop;
-        const sunMask =
-          `radial-gradient(circle ${(globeRadius + 2).toFixed(0)}px at ${holeX.toFixed(0)}px ${holeY.toFixed(0)}px, ` +
-          `rgba(0,0,0,0) 0 ${(globeRadius - 2).toFixed(0)}px, rgba(0,0,0,1) ${(globeRadius + 2).toFixed(0)}px)`;
-        sun.style.webkitMaskImage = sunMask;
-        sun.style.maskImage = sunMask;
-        // Still fades when it would hang in front of the lit face —
-        // physically it is behind the camera there.
-        const bearing = Math.abs(delta);
-        const nearFade = Math.min(1, Math.max(0, (bearing - 20) / 15));
-        sun.style.opacity = nearFade.toFixed(2);
-      }
-
-      // Atmosphere rim: brightest on the limb facing the sun, fading around
-      // to the night side — a masked ring hugging the globe's silhouette.
-      const atmo = document.getElementById("oh-atmo-glow");
-      if (atmo) {
-        const diameter = globeRadius * 2 * 1.1;
-        atmo.style.width = `${diameter.toFixed(0)}px`;
-        atmo.style.height = `${diameter.toFixed(0)}px`;
-        atmo.style.left = `${(width / 2 - diameter / 2).toFixed(0)}px`;
-        atmo.style.top = `${(height / 2 - diameter / 2).toFixed(0)}px`;
-        // Aim the bright side of the ring at the sun (CSS 0deg points up).
-        const cssAngle = 90 + (Math.atan2(sunY - height / 2, sunX - width / 2) * 180) / Math.PI;
-        const maskValue = `linear-gradient(${(cssAngle + 180).toFixed(1)}deg, rgba(0,0,0,1) 25%, rgba(0,0,0,0.1) 72%)`;
-        atmo.style.webkitMaskImage = maskValue;
-        atmo.style.maskImage = maskValue;
-        // Gone once the globe outgrows the viewport; a faint band survives on
-        // the night side, full burn on the limb the sun is lighting.
-        const zoomFade = Math.max(0, Math.min(1, (5.2 - zoom) / 0.8));
-        const sunFade = 0.25 + 0.75 * Math.max(0, Math.min(1, (150 - Math.abs(delta)) / 90));
-        atmo.style.opacity = (zoomFade * sunFade).toFixed(2);
-      }
+      // Land the baked sun pixel at screen-center + its bearing off axis.
+      // The strip spans exactly 360°, so the modulo can never visibly snap.
+      let bgX = width / 2 + delta * SKYBOX_PX_PER_DEG - SKYBOX_SUN_U * SKYBOX_SIZE;
+      bgX = ((bgX % SKYBOX_SIZE) + SKYBOX_SIZE) % SKYBOX_SIZE;
+      const bgY = (height - SKYBOX_SIZE) / 2 + center.lat * SKYBOX_PX_PER_LAT_DEG;
+      space.style.backgroundPosition = `${bgX.toFixed(1)}px ${bgY.toFixed(1)}px`;
     };
 
     const tick = (now) => {
