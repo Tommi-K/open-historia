@@ -26,9 +26,10 @@ REM  After updating, run "Launch Open Historia.bat" as usual -
 REM  it reinstalls dependencies and rebuilds automatically.
 REM ============================================================
 
-REM Which repository to update from.
-set "REPO_OWNER=Tommi-K"
-set "REPO_NAME=open-historia"
+REM Which repository to update from. This install tracks the Beta repo -
+REM pointing anywhere else would replace it with a different codebase.
+set "REPO_OWNER=Arkniem"
+set "REPO_NAME=Open-Historia-Beta"
 set "REPO_BRANCH=main"
 
 REM Work from the folder this script lives in (the project root)
