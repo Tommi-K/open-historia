@@ -89,15 +89,13 @@ const WORLD_STYLE = {
       },
     },
   ],
+  // MapLibre's own atmosphere is OFF: its halo is uniform all the way around
+  // the globe regardless of where the sun sits. The directional replacement
+  // is the AtmosphereGlow ring below, aimed and faded by GlobeEffects. A
+  // side benefit: without the atmosphere pass, space stays transparent, so
+  // the starfield and sun shine through at full strength.
   sky: {
-    "atmosphere-blend": [
-      "interpolate",
-      ["linear"],
-      ["zoom"],
-      0, 1,
-      5, 1,
-      7, 0,
-    ],
+    "atmosphere-blend": 0,
   },
 };
 
@@ -187,8 +185,8 @@ const AtmosphereGlow = () => (
       // The div is sized 1.1× the globe's diameter; the bright band sits at
       // 91-96% of the div radius = just OUTSIDE the globe's silhouette.
       background:
-        "radial-gradient(circle, rgba(0,0,0,0) 0 86%, rgba(148,196,255,0.07) 89%, " +
-        "rgba(160,205,255,0.4) 92%, rgba(120,175,255,0.45) 94%, rgba(80,130,240,0.18) 97%, rgba(0,0,0,0) 100%)",
+        "radial-gradient(circle, rgba(0,0,0,0) 0 85%, rgba(150,200,255,0.12) 89%, " +
+        "rgba(175,218,255,0.6) 92%, rgba(140,190,255,0.62) 94%, rgba(90,140,245,0.28) 97%, rgba(0,0,0,0) 100%)",
     }}
   />
 );

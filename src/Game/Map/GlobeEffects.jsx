@@ -10,8 +10,11 @@ const INTERACTION_GRACE_MS = 3000;
 // smooth cosine-eased ramp to full night by 102° (civil twilight, roughly).
 const DAY_LIMIT_DEG = 78;
 const NIGHT_LIMIT_DEG = 102;
-const NIGHT_OPACITY = 0.52;
-const RAMP_STEP_DEG = 1;
+const NIGHT_OPACITY = 0.76;
+const RAMP_STEP_DEG = 0.5;
+// Star parallax: scaled so a full 360° wrap of the camera longitude shifts
+// the 512px star tile by exactly two tiles — no snap when the value wraps.
+const STAR_PX_PER_DEG = 1024 / 360;
 
 const NIGHT_LAYER_ID = "globe-night";
 
@@ -50,20 +53,25 @@ const bandFeature = (west, east, opacity) => {
   };
 };
 
-// The night shade as a true gradient: thin strips through the twilight zones
-// whose opacity follows the smoothed illumination curve, plus one solid core.
+// The night shade as a true gradient built from NESTED bands, onion-style:
+// band i spans from i degrees into the dusk ramp, around the whole night
+// side, to the mirrored point in the dawn ramp. Each layer adds a small
+// alpha increment and the stack composites to the smoothstep illumination
+// curve. No two bands share an adjacent edge, so the projection-subdivision
+// cracks that showed as seam lines between side-by-side strips cannot occur
+// — at worst a crack loses one thin layer's increment, not the whole shade.
 const buildNightCollection = (sunLng) => {
   const features = [];
-  const rampWidth = NIGHT_LIMIT_DEG - DAY_LIMIT_DEG;
-  // Strips share EXACT edge coordinates (antialias is off): any overlap
-  // between translucent neighbours would double up into visible seam lines.
-  for (let d = DAY_LIMIT_DEG; d < NIGHT_LIMIT_DEG; d += RAMP_STEP_DEG) {
-    const opacity = NIGHT_OPACITY * smoothstep((d + RAMP_STEP_DEG / 2 - DAY_LIMIT_DEG) / rampWidth);
-    // Dusk side (east of the subsolar point) and dawn side (west), mirrored.
-    features.push(bandFeature(sunLng + d, sunLng + d + RAMP_STEP_DEG, opacity));
-    features.push(bandFeature(sunLng + 360 - d - RAMP_STEP_DEG, sunLng + 360 - d, opacity));
+  const steps = Math.round((NIGHT_LIMIT_DEG - DAY_LIMIT_DEG) / RAMP_STEP_DEG);
+  let stacked = 0;
+  for (let i = 1; i <= steps; i += 1) {
+    const target = NIGHT_OPACITY * smoothstep(i / steps);
+    // Per-layer alpha so that 1 - Π(1 - o_i) hits the target curve.
+    const layerOpacity = (target - stacked) / (1 - stacked);
+    const d = DAY_LIMIT_DEG + i * RAMP_STEP_DEG;
+    features.push(bandFeature(sunLng + d, sunLng + 360 - d, layerOpacity));
+    stacked = target;
   }
-  features.push(bandFeature(sunLng + NIGHT_LIMIT_DEG, sunLng + 360 - NIGHT_LIMIT_DEG, NIGHT_OPACITY));
   return { type: "FeatureCollection", features };
 };
 
@@ -105,11 +113,13 @@ const GlobeEffects = ({ active }) => {
       // Where is the sun relative to the camera? 0 = dead ahead.
       const delta = normalizeLng((sunWorldLng ?? 0) - center.lng);
 
-      // Stars are fixed in inertial space: while the earth spins under an
-      // idle camera they hold still; panning the camera slides them.
+      // The sky turns WITH the globe: tied to the camera longitude, the
+      // stars drift the same screen direction as the surface whenever the
+      // globe rotates — auto-rotation or a drag — never against it.
       const space = document.getElementById("oh-globe-space");
       if (space) {
-        space.style.backgroundPosition = `${(delta * 2.4).toFixed(1)}px ${(center.lat * 2.4).toFixed(1)}px`;
+        space.style.backgroundPosition =
+          `${(-center.lng * STAR_PX_PER_DEG).toFixed(1)}px ${(center.lat * STAR_PX_PER_DEG).toFixed(1)}px`;
       }
 
       // The sun: horizontal position from its bearing off the view axis;
@@ -144,12 +154,13 @@ const GlobeEffects = ({ active }) => {
         atmo.style.top = `${(height / 2 - diameter / 2).toFixed(0)}px`;
         // Aim the bright side of the ring at the sun (CSS 0deg points up).
         const cssAngle = 90 + (Math.atan2(sunY - height / 2, sunX - width / 2) * 180) / Math.PI;
-        const maskValue = `linear-gradient(${(cssAngle + 180).toFixed(1)}deg, rgba(0,0,0,1) 30%, rgba(0,0,0,0.07) 78%)`;
+        const maskValue = `linear-gradient(${(cssAngle + 180).toFixed(1)}deg, rgba(0,0,0,1) 22%, rgba(0,0,0,0.03) 68%)`;
         atmo.style.webkitMaskImage = maskValue;
         atmo.style.maskImage = maskValue;
-        // Gone once the globe outgrows the viewport; always a faint night rim.
+        // Gone once the globe outgrows the viewport; near-nothing when the
+        // sun is around the far side, full burn when it lights this limb.
         const zoomFade = Math.max(0, Math.min(1, (5.2 - zoom) / 0.8));
-        const sunFade = 0.35 + 0.65 * Math.max(0, Math.min(1, (150 - Math.abs(delta)) / 90));
+        const sunFade = 0.12 + 0.88 * Math.max(0, Math.min(1, (150 - Math.abs(delta)) / 90));
         atmo.style.opacity = (zoomFade * sunFade).toFixed(2);
       }
     };
