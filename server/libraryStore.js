@@ -17,6 +17,113 @@ const PMTILES_ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
 
 const DEFAULT_SCENARIO_ID = "default";
 const DEFAULT_GAME_ID = "default";
+
+// ---------------------------------------------------------------------------
+// One naming scheme for authors: FULL COUNTRY NAMES work everywhere a country
+// is referenced (ownership overrides, ownerCodes, polity keys, colors, the
+// played country). Known names canonicalize to their internal code — flags
+// and stock colors keep working — and unknown names simply ARE the
+// identifier. Codes remain valid input too.
+// ---------------------------------------------------------------------------
+const COUNTRY_NAMES_PATH = path.join(__dirname, "country-names.json");
+
+const loadCountryNameRegistry = () => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(COUNTRY_NAMES_PATH, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const COUNTRY_NAME_REGISTRY = loadCountryNameRegistry(); // code -> name
+const NAME_TO_CODE = new Map(
+  Object.entries(COUNTRY_NAME_REGISTRY).map(([code, name]) => [String(name).trim().toLowerCase(), code]),
+);
+const KNOWN_CODES = new Set(Object.keys(COUNTRY_NAME_REGISTRY));
+
+// Resolve one author-supplied country reference (name or code) to the
+// canonical identifier. `world` extends the lookup with the scenario's own
+// polities (their names and aliases map to their codes).
+const canonicalizeCountryRef = (value, world) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return raw;
+  if (KNOWN_CODES.has(raw)) return raw;
+
+  const lower = raw.toLowerCase();
+  const overrides = world?.polityOverrides;
+  if (overrides && typeof overrides === "object") {
+    if (overrides[raw]) return raw; // already a scenario polity code
+    for (const [code, polity] of Object.entries(overrides)) {
+      if (!polity || typeof polity !== "object") continue;
+      if (String(polity.name ?? "").trim().toLowerCase() === lower) return polity.code || code;
+      if (Array.isArray(polity.aliases) &&
+          polity.aliases.some((alias) => String(alias).trim().toLowerCase() === lower)) {
+        return polity.code || code;
+      }
+    }
+  }
+
+  const byName = NAME_TO_CODE.get(lower);
+  if (byName) return byName;
+
+  // Unknown reference: it is its own identifier (custom polities may simply
+  // BE their name).
+  return raw;
+};
+
+// Canonicalize every country reference inside a world payload, in place-safe
+// copies. Region ids are untouched; only OWNER references translate.
+const canonicalizeWorldCountryRefs = (world) => {
+  if (!world || typeof world !== "object" || Array.isArray(world)) return world;
+  const next = { ...world };
+
+  if (next.regionOwnershipOverrides && typeof next.regionOwnershipOverrides === "object") {
+    next.regionOwnershipOverrides = Object.fromEntries(
+      Object.entries(next.regionOwnershipOverrides).map(([regionId, owner]) => [
+        regionId,
+        canonicalizeCountryRef(owner, world),
+      ]),
+    );
+  }
+
+  if (Array.isArray(next.ownerCodes)) {
+    next.ownerCodes = [...new Set(next.ownerCodes.map((entry) => canonicalizeCountryRef(entry, world)))];
+  }
+
+  if (next.polityOverrides && typeof next.polityOverrides === "object") {
+    next.polityOverrides = Object.fromEntries(
+      Object.entries(next.polityOverrides).map(([key, polity]) => {
+        const code = canonicalizeCountryRef(polity?.code || key, world);
+        return [code, polity && typeof polity === "object" ? { ...polity, code } : polity];
+      }),
+    );
+  }
+
+  if (Array.isArray(next.units)) {
+    next.units = next.units.map((unit) =>
+      unit && typeof unit === "object" && unit.ownerCode
+        ? { ...unit, ownerCode: canonicalizeCountryRef(unit.ownerCode, world) }
+        : unit,
+    );
+  }
+
+  return next;
+};
+
+// Colors may be keyed by name as well; keys canonicalize like everything else.
+const canonicalizeColorKeys = (colors, world) => {
+  if (!colors || typeof colors !== "object" || Array.isArray(colors)) return colors;
+  return Object.fromEntries(
+    Object.entries(colors).map(([key, value]) => [canonicalizeCountryRef(key, world), value]),
+  );
+};
+
+// The played country may be written as a full name too.
+const canonicalizeGameCountry = (game) => {
+  if (!game || typeof game !== "object" || Array.isArray(game) || !game.country) return game;
+  return { ...game, country: canonicalizeCountryRef(game.country, null) };
+};
 const BUILT_IN_SCENARIO_DEFAULT_DATE = "2016-01-01";
 const SCENARIO_BUNDLE_SCHEMA = "pax-historia-scenario-bundle";
 const SCENARIO_BUNDLE_VERSION = 1;
@@ -1306,9 +1413,9 @@ const updateScenario = (
   });
 
   if (game && typeof game === "object") {
-    writeJsonFile(getScenarioJsonPath(scenarioId, "game"), game);
+    writeJsonFile(getScenarioJsonPath(scenarioId, "game"), canonicalizeGameCountry(game));
   } else if (gamePatch && typeof gamePatch === "object") {
-    mergeJsonAsset(getScenarioJsonPath(scenarioId, "game"), gamePatch, JSON_ASSET_DEFAULTS.game);
+    mergeJsonAsset(getScenarioJsonPath(scenarioId, "game"), canonicalizeGameCountry(gamePatch), JSON_ASSET_DEFAULTS.game);
   }
 
   if (prompts && typeof prompts === "object") {
@@ -1322,9 +1429,9 @@ const updateScenario = (
   }
 
   if (world && typeof world === "object") {
-    writeJsonFile(getScenarioJsonPath(scenarioId, "world"), world);
+    writeJsonFile(getScenarioJsonPath(scenarioId, "world"), canonicalizeWorldCountryRefs(world));
   } else if (worldPatch && typeof worldPatch === "object") {
-    mergeJsonAsset(getScenarioJsonPath(scenarioId, "world"), worldPatch, JSON_ASSET_DEFAULTS.world);
+    mergeJsonAsset(getScenarioJsonPath(scenarioId, "world"), canonicalizeWorldCountryRefs(worldPatch), JSON_ASSET_DEFAULTS.world);
   }
 
   if (storage && typeof storage === "object") {
@@ -1381,9 +1488,9 @@ const updateGame = (
   });
 
   if (game && typeof game === "object") {
-    writeJsonFile(getGameJsonPath(gameId, "game"), game);
+    writeJsonFile(getGameJsonPath(gameId, "game"), canonicalizeGameCountry(game));
   } else if (gamePatch && typeof gamePatch === "object") {
-    mergeJsonAsset(getGameJsonPath(gameId, "game"), gamePatch, JSON_ASSET_DEFAULTS.game);
+    mergeJsonAsset(getGameJsonPath(gameId, "game"), canonicalizeGameCountry(gamePatch), JSON_ASSET_DEFAULTS.game);
   }
 
   if (prompts && typeof prompts === "object") {
@@ -1393,9 +1500,9 @@ const updateGame = (
   }
 
   if (world && typeof world === "object") {
-    writeJsonFile(getGameJsonPath(gameId, "world"), world);
+    writeJsonFile(getGameJsonPath(gameId, "world"), canonicalizeWorldCountryRefs(world));
   } else if (worldPatch && typeof worldPatch === "object") {
-    mergeJsonAsset(getGameJsonPath(gameId, "world"), worldPatch, JSON_ASSET_DEFAULTS.world);
+    mergeJsonAsset(getGameJsonPath(gameId, "world"), canonicalizeWorldCountryRefs(worldPatch), JSON_ASSET_DEFAULTS.world);
   }
 
   if (storage && typeof storage === "object") {
@@ -1755,8 +1862,21 @@ const writeRuntimeJsonAsset = (assetKey, value) => {
     activeGameId = details.game.id;
     console.log(`No active game — created "${activeGameId}" from scenario "${scenario.id}".`);
   }
+  // Authors and the AI may reference countries by full name anywhere; the
+  // stored form is canonical (see canonicalizeCountryRef).
+  let canonical = value;
+  if (assetKey === "world") {
+    canonical = canonicalizeWorldCountryRefs(value);
+  } else if (assetKey === "game") {
+    canonical = canonicalizeGameCountry(value);
+  } else if (assetKey === "colors") {
+    const worldPath = getGameJsonPath(activeGameId, "world");
+    const worldContext = fs.existsSync(worldPath) ? readJsonFile(worldPath, {}) : null;
+    canonical = canonicalizeColorKeys(value, worldContext);
+  }
+
   const targetPath = getGameJsonPath(activeGameId, assetKey);
-  writeJsonFile(targetPath, value);
+  writeJsonFile(targetPath, canonical);
   writeGameMeta(activeGameId, {});
   return readRuntimeJsonAsset(assetKey);
 };

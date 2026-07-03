@@ -485,10 +485,14 @@ const ToolView = ({ tool, header, busy, status, game, polities, refresh, runBusy
     if (tool === "edit-country" || tool === "add-country") {
         const adding = tool === "add-country";
         const applyCountry = () => runBusy(async () => {
-            const code = (adding ? fields.code : target || "").trim().toUpperCase();
             const name = (fields.name ?? "").trim();
+            // One naming scheme: the full name alone is enough — it becomes
+            // the identifier when no short code is given.
+            const code = adding
+                ? ((fields.code ?? "").trim().toUpperCase() || name)
+                : (target || "").trim();
             const colorHex = (fields.color ?? "").trim();
-            if (!code) throw new Error(adding ? "A short code is required (e.g. NEW, ATL)." : "Pick a country first.");
+            if (!code) throw new Error(adding ? "Give the country a name." : "Pick a country first.");
             const world = await readWorldState({ force: true });
             const existing = world.polityOverrides?.[code] ?? {};
             const nextOverride = {
@@ -518,7 +522,7 @@ const ToolView = ({ tool, header, busy, status, game, polities, refresh, runBusy
             <div style={{ overflowY: "auto" }}>
             {adding ? (
                 <>
-                <label style={labelStyle}>Code (2–5 letters)</label>
+                <label style={labelStyle}>Code (optional — the name works on its own)</label>
                 <input style={inputStyle} value={fields.code ?? ""} maxLength={5} onChange={(event) => setFields({ ...fields, code: event.target.value.toUpperCase() })} placeholder="ATL" />
                 </>
             ) : (
