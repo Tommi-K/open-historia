@@ -1090,6 +1090,44 @@ export const generateCountryStats = async ({ code, name } = {}) => {
   return String(raw || "").trim();
 };
 
+// Structured national stat sheet for the Stats tab: same grounding as the
+// intelligence briefing, but strict JSON so the UI can render bars and cards.
+export const generateCountryStatSheet = async ({ code, name } = {}) => {
+  const bundle = await readGameStateBundle({ force: true });
+  const variables = await buildTemplateVariables(bundle);
+  const target = name || code || "the polity";
+  const dossier = await buildTargetDossier(bundle, normalizeString(code));
+  const era = normalizeString(bundle.world?.simulationRules).slice(0, 700);
+  const system =
+    `You are the statistics bureau of an alternate-history strategy game. ` +
+    `The current date is ${variables.date || "unknown"}. ` +
+    `Compile a national stat sheet for ${target}${code ? ` (code ${code})` : ""}. ` +
+    `Treat the TARGET DOSSIER and WORLD STATE below as ground truth; where specifics are not recorded, ` +
+    `give your best historical estimate for this era, people and region — never refuse, never say unknown. ` +
+    `Money units must fit the era (barter/tribute-era polities still get best-effort figures).\n\n` +
+    (era ? `ERA & WORLD RULES:\n${era}\n\n` : "") +
+    `TARGET DOSSIER:\n${dossier || "(nothing recorded)"}\n\n` +
+    `WORLD STATE:\n${variables.worldSummary || "(no summary)"}\n\n` +
+    `RECENT EVENTS:\n${variables.recentEvents || "(none)"}\n\n` +
+    `Respond with ONLY a JSON object — no prose, no markdown fences — exactly this shape:\n` +
+    `{"capital":"city","continent":"continent","government":"system · ideology","leader":"head of state/government",` +
+    `"stability":0-100 integer,` +
+    `"indices":{"sovereignty":0-100,"foodAutonomy":0-100,"energyAutonomy":0-100,"economicIndependence":0-100,"internalSecurity":0-100},` +
+    `"economy":{"gdp":"9 B$","gdpGrowth":"+5.2% / yr","gdpPerCapita":"796 $","currency":"XOF",` +
+    `"inflation":"0.3%","unemployment":"1%","publicDebt":"47.5% GDP","budgetBalance":"-3.7% GDP"},` +
+    `"gdpBreakdown":{"agriculture":24,"industry":24,"services":52}}\n` +
+    `gdpBreakdown percentages must sum to 100. ` +
+    `Write text values in ${variables.language || "English"}; keep numbers plain.`;
+  const raw = await callAI(system, [
+    { role: "user", parts: [{ text: `Compile the national stat sheet for ${target}.` }] },
+  ]);
+  const parsed = extractJsonPayload(raw);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("The stat sheet did not come back as valid JSON.");
+  }
+  return parsed;
+};
+
 export const refinePlayerAction = async (rawInput, { persist = true } = {}) => {
   const bundle = await readGameStateBundle({ force: true });
   const variables = await buildTemplateVariables(bundle, { actionInput: rawInput });

@@ -69,6 +69,10 @@ export const SATELLITE_TILE_TEMPLATE =
 // World_Terrain_Base serves levels 0-13; past that MapLibre must overscale
 // instead of requesting tiles that 404.
 export const SATELLITE_TILE_MAXZOOM = 13;
+// The high-res basemap source goes through this protocol so ESRI's baked-in
+// "Map Data Not Yet Available" placeholder tiles can be replaced with an
+// upscaled crop of the nearest ancestor tile that has real data.
+export const BASEMAP_PROTOCOL_TEMPLATE = "ohbase://{z}/{y}/{x}";
 export const TERRAIN_TILE_TEMPLATE =
   "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 
@@ -259,6 +263,131 @@ export const ensurePmtilesProtocol = () => {
   }
 
   return pmtilesProtocol;
+};
+
+// ---------------------------------------------------------------------------
+// Basemap protocol: ESRI serves a "Map Data Not Yet Available" JPEG (HTTP 200)
+// wherever a zoom level has no coverage — most of the world past ~level 9 on
+// World_Terrain_Base. Every placeholder is the same static image, so it can be
+// recognised by byte comparison and replaced with an upscaled crop of the
+// nearest ancestor tile that has real data: the highest resolution available,
+// with no banner.
+
+// Levels 0-9 have global coverage; placeholders only appear above that.
+const PLACEHOLDER_MIN_ZOOM = 9;
+let basemapProtocolReady = false;
+let placeholderRefPromise = null;
+
+const fetchBasemapTileBytes = async (z, y, x, signal) => {
+  const url = buildTileUrl(SATELLITE_TILE_TEMPLATE, { x, y, z });
+  const response = await fetch(url, { cache: "force-cache", signal });
+  if (!response.ok) {
+    throw new Error(`Failed to load basemap tile ${z}/${y}/${x}: HTTP ${response.status}`);
+  }
+  return response.arrayBuffer();
+};
+
+const bytesEqual = (a, b) => {
+  if (a.byteLength !== b.byteLength) return false;
+  const ua = a instanceof Uint8Array ? a : new Uint8Array(a);
+  const ub = b instanceof Uint8Array ? b : new Uint8Array(b);
+  for (let i = 0; i < ua.length; i += 1) {
+    if (ua[i] !== ub[i]) return false;
+  }
+  return true;
+};
+
+// Learn the placeholder's bytes from two level-13 tiles that cannot have real
+// detail (Arctic ocean, remote South Pacific). Only trust the reference when
+// both agree — if ESRI ever changes coverage there, detection simply turns
+// itself off and deep-zoom behaves like before.
+const loadPlaceholderRef = () => {
+  if (!placeholderRefPromise) {
+    placeholderRefPromise = (async () => {
+      try {
+        const [a, b] = await Promise.all([
+          fetchBasemapTileBytes(13, 0, 0),
+          fetchBasemapTileBytes(13, 5091, 1365),
+        ]);
+        return bytesEqual(a, b) ? new Uint8Array(a) : null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return placeholderRefPromise;
+};
+
+const synthesizeFromAncestor = async (z, y, x, placeholderRef, signal) => {
+  for (let pz = z - 1; pz >= 0; pz -= 1) {
+    const shift = z - pz;
+    const px = x >> shift;
+    const py = y >> shift;
+    let parentBytes;
+    try {
+      parentBytes = await fetchBasemapTileBytes(pz, py, px, signal);
+    } catch {
+      continue;
+    }
+    if (pz > PLACEHOLDER_MIN_ZOOM && bytesEqual(parentBytes, placeholderRef)) continue;
+
+    const scale = 2 ** shift;
+    const bitmap = await createImageBitmap(new Blob([parentBytes]));
+    const canvas = typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(256, 256)
+      : Object.assign(document.createElement("canvas"), { width: 256, height: 256 });
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    const srcSize = bitmap.width / scale;
+    ctx.drawImage(
+      bitmap,
+      (x - px * scale) * srcSize,
+      (y - py * scale) * srcSize,
+      srcSize,
+      srcSize,
+      0,
+      0,
+      256,
+      256,
+    );
+    bitmap.close?.();
+    const blob = canvas.convertToBlob
+      ? await canvas.convertToBlob({ type: "image/png" })
+      : await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return blob.arrayBuffer();
+  }
+  return null;
+};
+
+const basemapTileLoader = async (params, abortController) => {
+  const match = /^ohbase:\/\/(\d+)\/(\d+)\/(\d+)$/.exec(params.url);
+  if (!match) throw new Error(`Bad basemap tile URL: ${params.url}`);
+  const z = Number(match[1]);
+  const y = Number(match[2]);
+  const x = Number(match[3]);
+  const signal = abortController?.signal;
+
+  const data = await fetchBasemapTileBytes(z, y, x, signal);
+  if (z <= PLACEHOLDER_MIN_ZOOM) return { data };
+
+  const ref = await loadPlaceholderRef();
+  if (!ref || !bytesEqual(data, ref)) return { data };
+
+  try {
+    const synthesized = await synthesizeFromAncestor(z, y, x, ref, signal);
+    if (synthesized) return { data: synthesized };
+  } catch {
+    // Fall through: the placeholder beats a missing tile.
+  }
+  return { data };
+};
+
+export const ensureBasemapProtocol = () => {
+  if (!basemapProtocolReady) {
+    addProtocol("ohbase", basemapTileLoader);
+    basemapProtocolReady = true;
+  }
 };
 
 export const readJson = async (url, { defaultValue, force = false, signal } = {}) => {

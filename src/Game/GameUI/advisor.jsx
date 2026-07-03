@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Chart, registerables } from "chart.js";
 import { sendMessage, startChat, loadHistory } from "../AI/main.jsx";
 import { JSON_URLS, readJson, writeJson } from "../../runtime/assets.js";
+import StatsPane from "./stats.jsx";
 
 Chart.register(...registerables);
 
@@ -160,6 +161,28 @@ const loadMessages = async () => {
     } catch { return []; }
 };
 
+const TabButton = ({ icon, label, active, onClick }) => (
+    <button
+    onClick={onClick}
+    style={{
+        alignItems: "center",
+        background: "none",
+        border: "none",
+        borderBottom: active ? "2px solid #3b82f6" : "2px solid transparent",
+        color: active ? "white" : "rgba(255,255,255,0.55)",
+        cursor: "pointer",
+        display: "flex",
+        fontFamily: "sans-serif",
+        fontSize: "0.88rem",
+        fontWeight: active ? 700 : 500,
+        gap: "0.4rem",
+        padding: "0.9rem 0.85rem",
+    }}
+    >
+    <span style={{ fontSize: "1rem" }}>{icon}</span> {label}
+    </button>
+);
+
 const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
     const [messages, setMessages]   = useState([]);
     const [input, setInput]         = useState("");
@@ -167,6 +190,7 @@ const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
     const messagesEndRef            = useRef(null);
     const [hasOpened, setHasOpened] = useState(isAdvisorOpen);
     const [hasBootstrapped, setHasBootstrapped] = useState(false);
+    const [activeTab, setActiveTab] = useState("advisor");
 
     useEffect(() => {
         if (isAdvisorOpen) setHasOpened(true);
@@ -257,26 +281,35 @@ const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
             display: "flex", flexDirection: "column",
             color: "white", fontFamily: "sans-serif", overflow: "hidden",
         }}>
-        {/* Header */}
-        <div style={{ padding: "1.5rem 1.25rem 1rem", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-        <span style={{ fontSize: "1.5rem" }}>🧭</span>
-        <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 600, flex: 1 }}>Advisor</h2>
-        <button
-        onClick={async () => { setMessages([]); startChat(); await saveMessages([]); }}
-        title="Clear chat"
-        style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: "1.5rem", lineHeight: 1, padding: 0, display: "flex", alignItems: "center" }}
-        >🗑</button>
+        {/* Header: tabs to flip between the advisor chat and national stats. */}
+        <div style={{ alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", padding: "0 0.75rem 0 0.35rem" }}>
+        <TabButton icon="🧭" label="Advisor" active={activeTab === "advisor"} onClick={() => setActiveTab("advisor")} />
+        <TabButton icon="📊" label="Stats" active={activeTab === "stats"} onClick={() => setActiveTab("stats")} />
+        <div style={{ flex: 1 }} />
+        {activeTab === "advisor" && (
+            <button
+            onClick={async () => { setMessages([]); startChat(); await saveMessages([]); }}
+            title="Clear chat"
+            style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: "1.35rem", lineHeight: 1, padding: 0, display: "flex", alignItems: "center" }}
+            >🗑</button>
+        )}
         {/* On phones the panel slides over the 🧭 launcher, making it
             untappable — this ✕ is the way out. */}
         {onClose && (
             <button
             onClick={onClose}
             title="Close advisor"
-            style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", cursor: "pointer", fontSize: "1.35rem", lineHeight: 1, padding: "0 0 0 0.35rem", display: "flex", alignItems: "center" }}
+            style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", cursor: "pointer", fontSize: "1.35rem", lineHeight: 1, padding: "0 0 0 0.5rem", display: "flex", alignItems: "center" }}
             >✕</button>
         )}
         </div>
 
+        {/* National stats pane — kept mounted so flipping tabs is instant. */}
+        <div style={{ display: activeTab === "stats" ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
+        <StatsPane active={isAdvisorOpen && activeTab === "stats"} />
+        </div>
+
+        <div style={{ display: activeTab === "advisor" ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
         {/* Messages */}
         <div style={{ padding: "0.75rem", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1rem", scrollbarWidth: "none" }}>
         {messages.length === 0 && (
@@ -349,6 +382,7 @@ const AdvisorPanel = ({ isAdvisorOpen, onClose }) => {
         onMouseEnter={e => { if (!isLoading && input.trim()) e.currentTarget.style.backgroundColor = "#2563eb"; }}
         onMouseLeave={e => { if (!isLoading && input.trim()) e.currentTarget.style.backgroundColor = "#3b82f6"; }}
         >🚀</button>
+        </div>
         </div>
         </div>
         </>

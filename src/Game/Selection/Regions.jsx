@@ -19,7 +19,16 @@ export const setRegionClickInterceptor = (fn) => {
     _clickInterceptor = typeof fn === "function" ? fn : null;
 };
 
+// Passive tap on every region click (the Stats tab watches which country the
+// player is inspecting). Never consumes the click — popups still open.
+let _clickObserver = null;
+
+export const setRegionClickObserver = (fn) => {
+    _clickObserver = typeof fn === "function" ? fn : null;
+};
+
 export const onRegionSelected = (props) => {
+    try { _clickObserver?.(props); } catch { /* observers must never break clicks */ }
     if (_clickInterceptor && _clickInterceptor(props)) return;
 
     const { COUNTRY, NAME_1, GID_0, gid0, owner, lngLat } = props;
