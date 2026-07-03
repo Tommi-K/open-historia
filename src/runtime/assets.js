@@ -4,7 +4,23 @@ import { PMTiles, Protocol, SharedPromiseCache } from "pmtiles";
 
 const { addProtocol, setMaxParallelImageRequests, setWorkerCount } = mapLibreGl;
 
-const PRELOAD_CACHE_NAME = "pax-historia-preload-v1";
+// v2: v1 could serve a stale archive forever (no freshness check), which
+// left months-old map data — countries missing their names — in every
+// browser even after the files on disk were updated. Bumping the name
+// flushes everyone once; the HEAD check below keeps it fresh from now on.
+const PRELOAD_CACHE_NAME = "open-historia-preload-v2";
+
+// Drop caches from older versions once.
+if (typeof caches !== "undefined" && caches?.keys) {
+  caches
+    .keys()
+    .then((keys) => {
+      for (const key of keys) {
+        if (key !== PRELOAD_CACHE_NAME) caches.delete(key).catch(() => {});
+      }
+    })
+    .catch(() => {});
+}
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const FALLBACK_THREADS = 4;
 const remoteValueCache = new Map();
@@ -161,7 +177,20 @@ const buildRuntimeCacheUrl = (key) =>
 const fetchWithPersistence = async (url, { signal } = {}) => {
   const cached = await readPersistedResponse(url);
   if (cached) {
-    return { response: cached, fromCache: true };
+    // Updates replace assets on disk; a cached copy must not outlive them.
+    // Cheap freshness check: byte size against the server's copy. If the
+    // server can't answer (offline), the cached copy still serves.
+    try {
+      const head = await fetch(url, { method: "HEAD", signal });
+      const serverLength = head.ok ? head.headers.get("content-length") : null;
+      const cachedLength = cached.headers.get("content-length");
+      if (!serverLength || !cachedLength || serverLength === cachedLength) {
+        return { response: cached, fromCache: true };
+      }
+      // Sizes differ: fall through and refetch the fresh copy.
+    } catch {
+      return { response: cached, fromCache: true };
+    }
   }
 
   const response = await fetch(url, { cache: "force-cache", signal });
@@ -577,7 +606,9 @@ export const loadCountryNames = async ({ force = false } = {}) => {
 
         for (const [code, polity] of Object.entries(world?.polityOverrides ?? {})) {
           const resolvedCode = polity?.code || code;
-          const resolvedName = polity?.name || code;
+          // A nameless polity override must NOT degrade an existing proper
+          // name to a bare code.
+          const resolvedName = polity?.name || merged.get(resolvedCode)?.name || resolvedCode;
           if (!resolvedCode || !resolvedName) {
             continue;
           }
