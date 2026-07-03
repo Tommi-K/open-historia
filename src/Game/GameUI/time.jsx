@@ -1207,7 +1207,14 @@ const DateWidget = ({
     // dayjs("") / dayjs(null) is an Invalid Date, so guard before formatting.
     // Dates dayjs can't parse but that ARE text ("1200 BCE", ancient-era
     // scenarios) display verbatim instead of "Undated".
-    const playerCountry = gameData?.country || "";
+    // Full display name, never the code: era polity name first, then the
+    // base country name, then the raw value as a last resort.
+    const playerCountryCode = gameData?.country || "";
+    const playerCountry = playerCountryCode
+    ? (worldState?.polityOverrides?.[playerCountryCode]?.name
+        || polityLookup.get(playerCountryCode)
+        || playerCountryCode)
+    : "";
     const rawGameDate = gameData?.gameDate || gameData?.startDate || "";
     const parsedGameDate = rawGameDate ? dayjs(rawGameDate) : null;
     const hasValidGameDate = Boolean(parsedGameDate && parsedGameDate.isValid());

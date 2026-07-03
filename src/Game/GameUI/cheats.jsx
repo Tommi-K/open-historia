@@ -117,7 +117,7 @@ const PolitySelect = ({ polities, value, onChange, placeholder = "Pick a country
     <option value="">{placeholder}</option>
     {polities.map((polity) => (
         <option key={polity.code} value={polity.code} style={{ color: "black" }}>
-        {polity.name} ({polity.code})
+        {polity.name}
         </option>
     ))}
     </select>

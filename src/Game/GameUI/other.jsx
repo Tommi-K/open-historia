@@ -2,6 +2,7 @@
 import React, { memo, useEffect, useState } from "react";
 import { JSON_URLS, readJson } from "../../runtime/assets.js";
 import { useIsMobile } from "../../runtime/useIsMobile.js";
+import { useCountryDisplayName } from "../../runtime/polityNames.js";
 const baseStyle = {
     position: "fixed",
     backgroundColor: "rgba(17, 24, 39, 0.9)",
@@ -19,6 +20,8 @@ const baseStyle = {
 const Other = memo(function Other({ topOffset = "0.5rem" }) {
     const [country, setCountry] = useState(null);
     const isMobile = useIsMobile();
+    // The player sees the FULL country name, never the code.
+    const displayName = useCountryDisplayName(country);
     useEffect(() => {
         readJson(JSON_URLS.game, { defaultValue: {} })
         .then((data) => setCountry(data.country))
@@ -49,7 +52,7 @@ const Other = memo(function Other({ topOffset = "0.5rem" }) {
             textOverflow: "ellipsis",
         }}
         >
-        {country}
+        {displayName}
         </span>
         </div>
     );

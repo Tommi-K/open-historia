@@ -31,6 +31,7 @@ import { loadCountryNames } from "../../runtime/assets.js";
 import { UNIT_TYPES } from "../../runtime/gameState.js";
 import { useIsMobile } from "../../runtime/useIsMobile.js";
 import { DIFFICULTY_LEVELS } from "../../runtime/difficulty.js";
+import { useCountryDisplayName } from "../../runtime/polityNames.js";
 
 const UNIT_TYPE_LABELS = {
   infantry: "Infantry",
@@ -1385,13 +1386,15 @@ const LibraryTopBar = () => {
     }
   };
 
+  // Full country name in the summary, never the code.
+  const activeCountryName = useCountryDisplayName(activeGame?.country || "");
   const summaryText = useMemo(() => {
     if (activeGame) {
-      return `${activeGame.name} / ${activeGame.country || "No country"} / ${activeGame.currentDate || "No date"}`;
+      return `${activeGame.name} / ${activeCountryName || "No country"} / ${activeGame.currentDate || "No date"}`;
     }
 
     return "No active game";
-  }, [activeGame]);
+  }, [activeGame, activeCountryName]);
 
   const handleTabToggle = (tab) => {
     if (activeTab === tab) {
@@ -1761,10 +1764,10 @@ const LibraryTopBar = () => {
                         key={c.code || c.name}
                         type="button"
                         onClick={() => pickCountry(c.code)}
-                        style={{ ...actionButtonStyle, justifyContent: "space-between", background: "rgba(255,255,255,0.04)" }}
+                        style={{ ...actionButtonStyle, justifyContent: "flex-start", background: "rgba(255,255,255,0.04)" }}
                       >
+                        {/* Full names only — codes stay internal. */}
                         <span>{c.name}</span>
-                        <span style={{ opacity: 0.5, fontSize: "0.72rem" }}>{c.code}</span>
                       </button>
                     ))}
                 </div>
