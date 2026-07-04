@@ -167,7 +167,7 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         mapStyle={WORLD_STYLE}
         onIdle={handleIdle}
       >
-        <Nations />
+        <Nations isGlobe={isGlobe} />
         <Cities />
         <Units />
         <GlobeEffects active={isGlobe} />
