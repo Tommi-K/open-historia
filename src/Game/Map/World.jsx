@@ -1,5 +1,5 @@
 /*! Open Historia — portions (troop system integration + globe sun/stars) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import Map from "react-map-gl/maplibre";
 import Nations from "./Nations";
 import GlobeEffects from "./GlobeEffects.jsx";
@@ -9,11 +9,11 @@ import Cities from "./Cities";
 import Units from "./Units";
 import UnitPopup from "../Selection/Units";
 import {
-  BASEMAP_PROTOCOL_TEMPLATE,
-  SATELLITE_TILE_MAXZOOM,
-  SATELLITE_TILE_TEMPLATE,
   TERRAIN_TILE_TEMPLATE,
+  basemapMaxZoom,
+  basemapProtocolTemplate,
   ensureBasemapProtocol,
+  esriTileTemplate,
 } from "../../runtime/assets.js";
 import { SKYBOX_SIZE, getSkyboxUrl } from "./skybox.js";
 import { MAP_SETTING_KEYS, useMapSetting } from "../../runtime/mapSettings.js";
@@ -22,9 +22,9 @@ import { MAP_SETTING_KEYS, useMapSetting } from "../../runtime/mapSettings.js";
 // Not Yet Available" placeholders get replaced with upscaled ancestor tiles.
 ensureBasemapProtocol();
 
-// Grading for the World_Terrain_Base style: it's a pale cartographic map, so
-// cap brightness to sit against the dark UI and skip the photo-specific
-// contrast/hue tweaks the old satellite imagery needed.
+// Grading applied to whichever ESRI basemap is picked: cap brightness so it
+// sits against the dark UI, with a little desaturation/contrast that suits both
+// the satellite imagery and the paler cartographic styles.
 const SATELLITE_PAINT = {
   "raster-resampling": "linear",
   "raster-saturation": -0.15,
@@ -33,21 +33,21 @@ const SATELLITE_PAINT = {
   "raster-brightness-max": 0.78,
 };
 
-const WORLD_STYLE = {
+const buildWorldStyle = (basemapId) => ({
   version: 8,
   sources: {
     "satellite-lowres": {
       type: "raster",
       // Levels 0-2 always have real data — no placeholder handling needed.
-      tiles: [SATELLITE_TILE_TEMPLATE],
+      tiles: [esriTileTemplate(basemapId)],
       tileSize: 256,
       maxzoom: 2,
     },
     satellite: {
       type: "raster",
-      tiles: [BASEMAP_PROTOCOL_TEMPLATE],
+      tiles: [basemapProtocolTemplate(basemapId)],
       tileSize: 256,
-      maxzoom: SATELLITE_TILE_MAXZOOM,
+      maxzoom: basemapMaxZoom(basemapId),
     },
     "terrain-source": {
       type: "raster-dem",
@@ -99,52 +99,12 @@ const WORLD_STYLE = {
   sky: {
     "atmosphere-blend": 0,
   },
-};
+});
 
 function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
   const hasReportedInitialIdleRef = useRef(false);
-  // react-map-gl creates the underlying MapLibre instance asynchronously
-  // (after a dynamic import), so mapRef.current is still null on World's
-  // first mount pass. The imperative effects below need to re-run once the
-  // instance actually exists — mapReady (set from onLoad) is that signal.
-  const [mapReady, setMapReady] = useState(false);
-  const handleLoad = useCallback(() => setMapReady(true), []);
-  const reverseScrollZoom = useMapSetting(MAP_SETTING_KEYS.reverseScrollZoom);
-
-  // MapLibre decides scroll-zoom DIRECTION purely from the wheel delta's own
-  // sign, so reversal can't be done by reconfiguring the built-in handler.
-  // With reversal on, replace it outright: disable it and drive zoom from our
-  // own wheel listener with the sign flipped, so direction only ever depends
-  // on code we control.
-  useEffect(() => {
-    const map = mapRef?.current?.getMap?.();
-    if (!map || !mapReady) return undefined;
-
-    if (!reverseScrollZoom) {
-      map.scrollZoom.enable();
-      return undefined;
-    }
-
-    map.scrollZoom.disable();
-    const container = map.getCanvasContainer();
-    const onWheel = (event) => {
-      event.preventDefault();
-      // Match MapLibre's own normalization: a line-mode wheel event (e.g.
-      // Firefox on Windows with a physical mouse) reports deltaY in small
-      // integer "lines", not pixels — without this it takes hundreds of
-      // notches to zoom at all.
-      const value = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 40 : event.deltaY;
-      const zoomDelta = value / 450;
-      const rect = container.getBoundingClientRect();
-      const around = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-      map.easeTo({ zoom: map.getZoom() + zoomDelta, around, duration: 0 });
-    };
-    container.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      container.removeEventListener("wheel", onWheel);
-      map.scrollZoom.enable();
-    };
-  }, [mapRef, mapReady, reverseScrollZoom]);
+  const basemapId = useMapSetting(MAP_SETTING_KEYS.basemapStyle);
+  const worldStyle = useMemo(() => buildWorldStyle(basemapId), [basemapId]);
 
   const isGlobe = projection === "globe";
   const terrain = useMemo(
@@ -208,8 +168,7 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         renderWorldCopies
         projection={projection}
         terrain={terrain}
-        mapStyle={WORLD_STYLE}
-        onLoad={handleLoad}
+        mapStyle={worldStyle}
         onIdle={handleIdle}
       >
         <Nations isGlobe={isGlobe} />

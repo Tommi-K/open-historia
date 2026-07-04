@@ -30,6 +30,13 @@ export const PROVIDER_OPTIONS = [
         description: "Ollama, LM Studio, OpenRouter, local gateways",
         searchTerms: ["ollama", "lm studio", "openrouter", "vllm", "gateway", "proxy"],
     },
+    {
+        value: "anthropic-compatible",
+        label: "Anthropic Compatible",
+        group: "Gateways and self-hosted",
+        description: "Self-hosted proxy that speaks the Anthropic Messages API",
+        searchTerms: ["claude", "anthropic", "messages api", "proxy", "gateway", "self-hosted"],
+    },
 ];
 
 const PROVIDER_SETTINGS = {
@@ -45,11 +52,17 @@ const PROVIDER_SETTINGS = {
     },
     anthropic: {
         apiKey: { storageKey: "anthropic_api_key", defaultValue: "" },
-        // Empty means "use the real Anthropic API" (main.jsx's ANTHROPIC_API_ENDPOINT
-        // default) — set this to point at a self-hosted Anthropic-compatible proxy.
-        endpoint: { storageKey: "anthropic_endpoint", defaultValue: "" },
         model: { storageKey: "anthropic_model", defaultValue: "claude-haiku-4-5" },
         customParams: { storageKey: "anthropic_custom_params", defaultValue: "" },
+    },
+    // Self-hosted proxy speaking the Anthropic Messages API — routed through the
+    // game server's relay (see main.jsx callAnthropicCompatible), separate from
+    // the native Anthropic API above.
+    "anthropic-compatible": {
+        apiKey: { storageKey: "anthropic_compatible_api_key", defaultValue: "" },
+        endpoint: { storageKey: "anthropic_compatible_endpoint", defaultValue: "" },
+        model: { storageKey: "anthropic_compatible_model", defaultValue: "claude-haiku-4-5" },
+        customParams: { storageKey: "anthropic_compatible_custom_params", defaultValue: "" },
     },
     "openai-compatible": {
         apiKey: { storageKey: "openai_compatible_api_key", defaultValue: "" },
@@ -75,9 +88,12 @@ const FORM_FIELD_MAP = {
     openaiModel: { provider: "openai", field: "model" },
     openaiCustomParams: { provider: "openai", field: "customParams" },
     anthropicApiKey: { provider: "anthropic", field: "apiKey" },
-    anthropicEndpoint: { provider: "anthropic", field: "endpoint" },
     anthropicModel: { provider: "anthropic", field: "model" },
     anthropicCustomParams: { provider: "anthropic", field: "customParams" },
+    anthropicCompatibleApiKey: { provider: "anthropic-compatible", field: "apiKey" },
+    anthropicCompatibleEndpoint: { provider: "anthropic-compatible", field: "endpoint" },
+    anthropicCompatibleModel: { provider: "anthropic-compatible", field: "model" },
+    anthropicCompatibleCustomParams: { provider: "anthropic-compatible", field: "customParams" },
     openaiCompatibleApiKey: { provider: "openai-compatible", field: "apiKey" },
     openaiCompatibleEndpoint: { provider: "openai-compatible", field: "endpoint" },
     openaiCompatibleModel: { provider: "openai-compatible", field: "model" },

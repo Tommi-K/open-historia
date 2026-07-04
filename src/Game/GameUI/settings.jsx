@@ -13,6 +13,7 @@ import {
     getStoredLanguage,
     setStoredLanguage,
 } from "../../runtime/i18n.js";
+import { ESRI_BASEMAPS } from "../../runtime/assets.js";
 import {
     MAP_SETTING_KEYS,
     getMapSetting,
@@ -238,24 +239,6 @@ const Toggle = ({ label, enabled, onToggle }) => (
     }}
     />
     </button>
-    </div>
-);
-
-const Slider = ({ label, value, min, max, step, onChange }) => (
-    <div style={{ marginBottom: "1rem" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.35rem" }}>
-    <span style={{ fontSize: "0.9rem" }}>{label}</span>
-    <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)" }}>{value}</span>
-    </div>
-    <input
-    type="range"
-    min={min}
-    max={max}
-    step={step}
-    value={value}
-    onChange={(event) => onChange(Number(event.target.value))}
-    style={{ width: "100%", cursor: "pointer" }}
-    />
     </div>
 );
 
@@ -543,13 +526,6 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             helperText="Claude model ids are manual here. Leave blank to use the built-in default."
             />
             <SettingsInput
-            label="Anthropic Endpoint (optional)"
-            value={settings.anthropicEndpoint ?? ""}
-            onChange={(value) => onSettingChange("anthropicEndpoint", value)}
-            placeholder="https://api.anthropic.com/v1"
-            helperText="Leave blank to use the real Anthropic API. Set this to point at a self-hosted proxy that speaks the Anthropic Messages API format."
-            />
-            <SettingsInput
             label="Custom parameters (JSON)"
             multiline
             value={settings.anthropicCustomParams ?? ""}
@@ -589,6 +565,41 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             multiline
             value={settings.openaiCompatibleCustomParams ?? ""}
             onChange={(value) => onSettingChange("openaiCompatibleCustomParams", value)}
+            placeholder='{"top_p": 0.9}'
+            helperText="Optional. Merged into the request body — e.g. to limit reasoning budget/effort. Invalid JSON is ignored."
+            />
+            </>
+        )}
+
+        {provider === "anthropic-compatible" && (
+            <>
+            <SettingsInput
+            label="API Endpoint"
+            value={settings.anthropicCompatibleEndpoint ?? ""}
+            onChange={(value) => onSettingChange("anthropicCompatibleEndpoint", value)}
+            placeholder="https://my-proxy.example/v1"
+            helperText="Base URL of a self-hosted proxy that speaks the Anthropic Messages API (POST /messages). Routed through the game server to avoid CORS."
+            />
+            <SettingsInput
+            label="API Key (optional)"
+            type="password"
+            value={settings.anthropicCompatibleApiKey ?? ""}
+            onChange={(value) => onSettingChange("anthropicCompatibleApiKey", value)}
+            placeholder="Sent as x-api-key if set"
+            helperText="Leave empty if your proxy doesn't require a key."
+            />
+            <SettingsInput
+            label="Model"
+            value={settings.anthropicCompatibleModel ?? ""}
+            onChange={(value) => onSettingChange("anthropicCompatibleModel", value)}
+            placeholder="claude-haiku-4-5"
+            helperText="The model id your proxy expects. Leave blank to use the built-in default."
+            />
+            <SettingsInput
+            label="Custom parameters (JSON)"
+            multiline
+            value={settings.anthropicCompatibleCustomParams ?? ""}
+            onChange={(value) => onSettingChange("anthropicCompatibleCustomParams", value)}
             placeholder='{"top_p": 0.9}'
             helperText="Optional. Merged into the request body — e.g. to limit reasoning budget/effort. Invalid JSON is ignored."
             />
@@ -739,8 +750,7 @@ const SettingsMenu = ({
     const [mapSettings, setMapSettingsState] = useState(() => ({
         hideCountryLabels: getMapSetting(MAP_SETTING_KEYS.hideCountryLabels),
         disableIdleRotation: getMapSetting(MAP_SETTING_KEYS.disableIdleRotation),
-        reverseScrollZoom: getMapSetting(MAP_SETTING_KEYS.reverseScrollZoom),
-        borderWidth: getMapSetting(MAP_SETTING_KEYS.borderWidth),
+        basemapStyle: getMapSetting(MAP_SETTING_KEYS.basemapStyle),
     }));
 
     const updateMapSetting = (stateKey, settingKey, value) => {
@@ -812,7 +822,7 @@ const SettingsMenu = ({
         </div>
         <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
         <div style={{ margin: "0.5rem 0 1rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-        <div style={{ fontSize: "0.84rem", fontWeight: 700, marginBottom: "0.6rem" }}>Map interaction</div>
+        <div style={{ fontSize: "0.84rem", fontWeight: 700, marginBottom: "0.6rem" }}>Map</div>
         <Toggle
         label="Hide country labels"
         enabled={mapSettings.hideCountryLabels}
@@ -823,19 +833,21 @@ const SettingsMenu = ({
         enabled={mapSettings.disableIdleRotation}
         onToggle={() => updateMapSetting("disableIdleRotation", MAP_SETTING_KEYS.disableIdleRotation, !mapSettings.disableIdleRotation)}
         />
-        <Toggle
-        label="Reverse scroll zoom direction"
-        enabled={mapSettings.reverseScrollZoom}
-        onToggle={() => updateMapSetting("reverseScrollZoom", MAP_SETTING_KEYS.reverseScrollZoom, !mapSettings.reverseScrollZoom)}
-        />
-        <Slider
-        label="Border width"
-        value={mapSettings.borderWidth}
-        min={0.25}
-        max={3}
-        step={0.25}
-        onChange={(value) => updateMapSetting("borderWidth", MAP_SETTING_KEYS.borderWidth, value)}
-        />
+        <div style={{ marginBottom: "0.5rem" }}>
+        <div style={{ fontSize: "0.9rem", marginBottom: "0.4rem" }}>Map style</div>
+        <select
+        data-no-translate
+        value={mapSettings.basemapStyle}
+        onChange={(event) => updateMapSetting("basemapStyle", MAP_SETTING_KEYS.basemapStyle, event.target.value)}
+        style={{ ...inputStyle, cursor: "pointer" }}
+        >
+        {ESRI_BASEMAPS.map((basemap) => (
+            <option key={basemap.id} value={basemap.id} style={{ color: "black" }}>
+            {basemap.label}
+            </option>
+        ))}
+        </select>
+        </div>
         </div>
         <ComingSoonToggle label="Country borders" note="Not available yet — coming soon." />
 

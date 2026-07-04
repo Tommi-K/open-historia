@@ -6,21 +6,22 @@
 // beside the data it subscribes to.
 import { useEffect, useState } from "react";
 
+// Keep in sync with assets.js DEFAULT_BASEMAP_ID.
+const DEFAULT_BASEMAP_ID = "imagery";
+
 export const MAP_SETTING_KEYS = {
     hideCountryLabels: "map_hide_country_labels",
     disableIdleRotation: "map_disable_idle_rotation",
-    reverseScrollZoom: "map_reverse_scroll_zoom",
-    borderWidth: "map_border_width",
+    basemapStyle: "map_basemap_style",
 };
 
 const BOOLEAN_KEYS = new Set([
     MAP_SETTING_KEYS.hideCountryLabels,
     MAP_SETTING_KEYS.disableIdleRotation,
-    MAP_SETTING_KEYS.reverseScrollZoom,
 ]);
 
-const NUMBER_DEFAULTS = {
-    [MAP_SETTING_KEYS.borderWidth]: 1,
+const STRING_DEFAULTS = {
+    [MAP_SETTING_KEYS.basemapStyle]: DEFAULT_BASEMAP_ID,
 };
 
 export function getMapSetting(key) {
@@ -28,9 +29,8 @@ export function getMapSetting(key) {
         return localStorage.getItem(key) === "1";
     }
 
-    const raw = localStorage.getItem(key);
-    const parsed = raw == null ? NaN : Number(raw);
-    return Number.isFinite(parsed) ? parsed : NUMBER_DEFAULTS[key];
+    // String-valued settings (e.g. the basemap picker): stored value or default.
+    return localStorage.getItem(key) || STRING_DEFAULTS[key];
 }
 
 export function setMapSetting(key, value) {

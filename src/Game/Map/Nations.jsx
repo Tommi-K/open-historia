@@ -343,7 +343,6 @@ const WorldMap = ({ isGlobe = false }) => {
   const [worldState, setWorldState] = useState({ regionOwnershipOverrides: {} });
   const mapDisplaySettings = {
     hideCountryLabels: useMapSetting(MAP_SETTING_KEYS.hideCountryLabels),
-    borderWidth: useMapSetting(MAP_SETTING_KEYS.borderWidth),
   };
   // False until the first world.json read: before that we can't know whether
   // this game uses the stock map or a custom one, so NO political layer
@@ -697,7 +696,7 @@ const WorldMap = ({ isGlobe = false }) => {
   const countriesFillPaint = showStockCountries ? fillStyle : { ...fillStyle, "fill-opacity": 0 };
   const countriesOutlinePaint = {
     "line-color": "#000",
-    "line-width": mapDisplaySettings.borderWidth,
+    "line-width": 1,
     "line-opacity": showStockCountries ? 1 : 0,
   };
   // Region hairlines serve both map kinds, but nothing renders pre-worldKnown.
@@ -707,15 +706,7 @@ const WorldMap = ({ isGlobe = false }) => {
   // borders. The far hairlines come from the seed geometry itself instead.
   const regionsOutlinePaint = {
     "line-color": "#000",
-    // "zoom" is only valid as the direct input to a top-level step/interpolate
-    // expression — it cannot be wrapped in ["*", ...]. Bake the multiplier
-    // into each stop's value instead (still a plain-number expression).
-    "line-width": [
-      "interpolate", ["linear"], ["zoom"],
-      3, 0.2 * mapDisplaySettings.borderWidth,
-      8, 0.6 * mapDisplaySettings.borderWidth,
-      12, 1.0 * mapDisplaySettings.borderWidth,
-    ],
+    "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.2, 8, 0.6, 12, 1.0],
     "line-opacity": worldKnown
       ? ["interpolate", ["linear"], ["zoom"], 5.5, 0, 6.5, 0.6, 8, 0.7]
       : 0,
