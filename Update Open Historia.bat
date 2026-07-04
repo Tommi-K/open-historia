@@ -148,6 +148,17 @@ if exist "%SRC%\server\data\scenarios" (
     if errorlevel 8 goto :copyfail
 )
 
+REM 3b) ...except the built-in "default" scenario, which is shipped app content
+REM     (prompts, world, colors, template state), not player data - so its small
+REM     files are always refreshed, otherwise shipped updates to it never reach
+REM     an existing install. Its large LFS map data (regions.geojson) and
+REM     binaries are only pointers in a codeload zip, so they are excluded.
+REM     Saved games (server\data\games) are untouched regardless.
+if exist "%SRC%\server\data\scenarios\default" (
+    robocopy "%SRC%\server\data\scenarios\default" "%CD%\server\data\scenarios\default" /E /XF *.geojson *.pmtiles *.bin /NFL /NDL /NJH /NJS /NP >nul
+    if errorlevel 8 goto :copyfail
+)
+
 rmdir /s /q "%WORKDIR%" 2>nul
 
 REM Force a rebuild on next launch so the update actually takes effect.

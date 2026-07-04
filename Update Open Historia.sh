@@ -147,6 +147,18 @@ main() {
         rsync -a --ignore-existing "$SRC/server/data/scenarios/" "./server/data/scenarios/" || fail_copy
     fi
 
+    # 3b) ...except the built-in "default" scenario, which is shipped app content
+    #     (prompts, world, colors, template state), not player data - so its
+    #     small files are always refreshed, otherwise shipped updates to it never
+    #     reach an existing install. Its large map data (regions.geojson) and
+    #     binaries are LFS-backed and arrive as mere pointers in a codeload zip,
+    #     so they are excluded to avoid replacing the real files. Saved games
+    #     (server/data/games) are untouched regardless.
+    if [ -d "$SRC/server/data/scenarios/default" ]; then
+        rsync -a --exclude='*.geojson' --exclude='*.pmtiles' --exclude='*.bin' \
+            "$SRC/server/data/scenarios/default/" "./server/data/scenarios/default/" || fail_copy
+    fi
+
     rm -rf "$WORKDIR"
 
     # Force a rebuild on next launch so the update actually takes effect.
