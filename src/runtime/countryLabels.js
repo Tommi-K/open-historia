@@ -425,17 +425,22 @@ const buildCurvedLabelGlyphFeatures = (
     if (rotation > 90) rotation -= 180;
     if (rotation < -90) rotation += 180;
 
+    const [glyphLng, glyphLat] = tileToLngLat(sample.point[0], sample.point[1], extent);
+
     features.push({
       type: "Feature",
       id: `${featureId}-glyph-${glyphIndex}`,
       geometry: {
         type: "Point",
-        coordinates: tileToLngLat(sample.point[0], sample.point[1], extent),
+        coordinates: [glyphLng, glyphLat],
       },
       properties: {
         glyph,
         areaScale: areaScale * sizeScale,
         rotation,
+        // Each glyph's own latitude — Nations.jsx uses this to correct globe
+        // projection's text-size inflation at high latitude (see issue #6).
+        lat: glyphLat,
       },
     });
 
@@ -541,6 +546,8 @@ const buildCountryLabelCollections = async (tileData, ownedCodes = null) => {
               areaScale,
               name: name.toUpperCase(),
               rotation,
+              // See the glyph-feature branch above — same globe text-size fix.
+              lat,
             },
           },
     });
