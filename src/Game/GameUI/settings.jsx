@@ -13,6 +13,11 @@ import {
     getStoredLanguage,
     setStoredLanguage,
 } from "../../runtime/i18n.js";
+import {
+    MAP_SETTING_KEYS,
+    getMapSetting,
+    setMapSetting,
+} from "../../runtime/mapSettings.js";
 
 const baseStyle = {
     position: "fixed",
@@ -233,6 +238,24 @@ const Toggle = ({ label, enabled, onToggle }) => (
     }}
     />
     </button>
+    </div>
+);
+
+const Slider = ({ label, value, min, max, step, onChange }) => (
+    <div style={{ marginBottom: "1rem" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+    <span style={{ fontSize: "0.9rem" }}>{label}</span>
+    <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)" }}>{value}</span>
+    </div>
+    <input
+    type="range"
+    min={min}
+    max={max}
+    step={step}
+    value={value}
+    onChange={(event) => onChange(Number(event.target.value))}
+    style={{ width: "100%", cursor: "pointer" }}
+    />
     </div>
 );
 
@@ -713,6 +736,22 @@ const SettingsMenu = ({
 }) => {
     const selectedProvider = apiProvider ?? DEFAULT_PROVIDER;
 
+    const [mapSettings, setMapSettingsState] = useState(() => ({
+        hideCountryLabels: getMapSetting(MAP_SETTING_KEYS.hideCountryLabels),
+        disableIdleRotation: getMapSetting(MAP_SETTING_KEYS.disableIdleRotation),
+        reverseScrollZoom: getMapSetting(MAP_SETTING_KEYS.reverseScrollZoom),
+        disablePanInertia: getMapSetting(MAP_SETTING_KEYS.disablePanInertia),
+        zoomSensitivity: getMapSetting(MAP_SETTING_KEYS.zoomSensitivity),
+        borderWidth: getMapSetting(MAP_SETTING_KEYS.borderWidth),
+        featureSize: getMapSetting(MAP_SETTING_KEYS.featureSize),
+        blurSensitiveFlags: getMapSetting(MAP_SETTING_KEYS.blurSensitiveFlags),
+    }));
+
+    const updateMapSetting = (stateKey, settingKey, value) => {
+        setMapSetting(settingKey, value);
+        setMapSettingsState((current) => ({ ...current, [stateKey]: value }));
+    };
+
     return (
         <div
         style={{
@@ -776,6 +815,58 @@ const SettingsMenu = ({
         </span>
         </div>
         <Toggle label="3D Terrain" enabled={isTerrainEnabled} onToggle={onToggleTerrain} />
+        <div style={{ margin: "0.5rem 0 1rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ fontSize: "0.84rem", fontWeight: 700, marginBottom: "0.6rem" }}>Map interaction</div>
+        <Toggle
+        label="Hide country labels"
+        enabled={mapSettings.hideCountryLabels}
+        onToggle={() => updateMapSetting("hideCountryLabels", MAP_SETTING_KEYS.hideCountryLabels, !mapSettings.hideCountryLabels)}
+        />
+        <Toggle
+        label="Disable idle globe rotation"
+        enabled={mapSettings.disableIdleRotation}
+        onToggle={() => updateMapSetting("disableIdleRotation", MAP_SETTING_KEYS.disableIdleRotation, !mapSettings.disableIdleRotation)}
+        />
+        <Toggle
+        label="Reverse scroll zoom direction"
+        enabled={mapSettings.reverseScrollZoom}
+        onToggle={() => updateMapSetting("reverseScrollZoom", MAP_SETTING_KEYS.reverseScrollZoom, !mapSettings.reverseScrollZoom)}
+        />
+        <Toggle
+        label="Disable pan inertia"
+        enabled={mapSettings.disablePanInertia}
+        onToggle={() => updateMapSetting("disablePanInertia", MAP_SETTING_KEYS.disablePanInertia, !mapSettings.disablePanInertia)}
+        />
+        <Slider
+        label="Zoom sensitivity"
+        value={mapSettings.zoomSensitivity}
+        min={0.5}
+        max={3}
+        step={0.25}
+        onChange={(value) => updateMapSetting("zoomSensitivity", MAP_SETTING_KEYS.zoomSensitivity, value)}
+        />
+        <Slider
+        label="Border width"
+        value={mapSettings.borderWidth}
+        min={0.25}
+        max={3}
+        step={0.25}
+        onChange={(value) => updateMapSetting("borderWidth", MAP_SETTING_KEYS.borderWidth, value)}
+        />
+        <Slider
+        label="Feature size"
+        value={mapSettings.featureSize}
+        min={0.25}
+        max={3}
+        step={0.25}
+        onChange={(value) => updateMapSetting("featureSize", MAP_SETTING_KEYS.featureSize, value)}
+        />
+        <Toggle
+        label="Blur sensitive flags"
+        enabled={mapSettings.blurSensitiveFlags}
+        onToggle={() => updateMapSetting("blurSensitiveFlags", MAP_SETTING_KEYS.blurSensitiveFlags, !mapSettings.blurSensitiveFlags)}
+        />
+        </div>
         <ComingSoonToggle label="Country borders" note="Not available yet — coming soon." />
 
         {typeof onOpenCheats === "function" && (
