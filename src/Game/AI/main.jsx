@@ -437,21 +437,11 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
         providerLabel: "Anthropic",
     });
 
-    // A custom endpoint is a self-hosted proxy — it can't be assumed to send the
-    // CORS headers the real API does, so it goes through the relay like
-    // OpenAI-compatible endpoints do. The default (blank) endpoint keeps calling
-    // the real API directly, unchanged from before.
-    const customEndpoint = normalizeEndpoint(settings.endpoint);
-    const usingCustomEndpoint = Boolean(customEndpoint);
-    const endpoint = customEndpoint || ANTHROPIC_API_ENDPOINT;
-
     const headers = {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
-        // Only the real API needs/accepts this browser-safety opt-in; a
-        // self-hosted proxy is called server-to-server via the relay instead.
-        ...(usingCustomEndpoint ? {} : { "anthropic-dangerous-direct-browser-access": "true" }),
+        "anthropic-dangerous-direct-browser-access": "true",
     };
 
     // Reasoning toggle (settings): extended thinking. max_tokens must exceed the
@@ -469,9 +459,11 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
             messages: toAnthropicMessages(history),
             ...customParams,
         };
-        const response = usingCustomEndpoint
-            ? await relayFetch(`${endpoint}/messages`, { headers, payload: body })
-            : await fetch(`${endpoint}/messages`, { method: "POST", headers, body: JSON.stringify(body) });
+        const response = await fetch(`${ANTHROPIC_API_ENDPOINT}/messages`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+        });
 
         if (response.status === 429 || response.status === 503) {
             if (attempt === retries) {
@@ -500,6 +492,70 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
     }
 }
 
+async function callAnthropicCompatible(systemPrompt, history, { retries = 3, retryDelay = 15000 } = {}) {
+    const settings = getProviderSettings("anthropic-compatible");
+    const endpoint = normalizeEndpoint(settings.endpoint);
+
+    if (!endpoint) {
+        throw new Error("Go to **settings**, select Anthropic Compatible, and enter your endpoint (a self-hosted Anthropic Messages API proxy).");
+    }
+
+    const apiKey = settings.apiKey.trim();
+    const model = await resolveModel("anthropic-compatible", {
+        fallbackModel: ANTHROPIC_DEFAULT_MODEL,
+        providerLabel: "Anthropic Compatible",
+    });
+
+    // Self-hosted proxy: called server-to-server through the relay (it can't be
+    // assumed to send browser CORS headers), so the browser-access opt-in the
+    // real API needs is dropped and the key rides as x-api-key only if provided.
+    const headers = {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+        ...(apiKey ? { "x-api-key": apiKey } : {}),
+    };
+
+    const reasoning = getReasoningEnabled();
+    const customParams = parseCustomParams(settings.customParams, "Anthropic Compatible");
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        const body = {
+            model,
+            system: systemPrompt,
+            max_tokens: reasoning ? 8192 : 1024,
+            ...(reasoning ? { thinking: { type: "enabled", budget_tokens: 4096 } } : {}),
+            messages: toAnthropicMessages(history),
+            ...customParams,
+        };
+        const response = await relayFetch(`${endpoint}/messages`, { headers, payload: body });
+
+        if (response.status === 429 || response.status === 503) {
+            if (attempt === retries) {
+                const payload = await readErrorPayload(response);
+                throw new Error(extractErrorMessage(payload, "The Anthropic-compatible endpoint is busy right now. Try again in a moment."));
+            }
+
+            console.warn(`Anthropic-compatible endpoint is busy. Retrying in ${retryDelay / 1000}s... (attempt ${attempt}/${retries})`);
+            await sleep(retryDelay);
+            continue;
+        }
+
+        if (!response.ok) {
+            const payload = await readErrorPayload(response);
+            throw new Error(extractErrorMessage(payload, `Anthropic-compatible request failed (${response.status})`));
+        }
+
+        const data = await response.json();
+        const text = extractAnthropicText(data);
+
+        if (!text) {
+            throw new Error("Anthropic-compatible response did not contain text.");
+        }
+
+        return text;
+    }
+}
+
 export async function callAI(systemPrompt, history, opts) {
     // Non-English players get replies in their language at the source —
     // native answers beat post-translating them (see runtime/i18n.js).
@@ -513,6 +569,8 @@ export async function callAI(systemPrompt, history, opts) {
         return callOpenAI(systemPrompt, history, opts);
     case "anthropic":
         return callAnthropic(systemPrompt, history, opts);
+    case "anthropic-compatible":
+        return callAnthropicCompatible(systemPrompt, history, opts);
     case "openai-compatible":
         return callOpenAICompatible(systemPrompt, history, opts);
     case "gemini":
