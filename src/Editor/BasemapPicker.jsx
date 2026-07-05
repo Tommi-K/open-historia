@@ -11,7 +11,8 @@
 import { useEffect, useState } from "react";
 import { EDITOR_BASEMAPS, esriPreviewUrl } from "./basemaps.js";
 import { BACKGROUND_ACCEPT } from "./customBackground.js";
-import { listBasemaps, deleteBasemap as deleteBasemapApi } from "../runtime/basemapLibrary.js";
+import { listBasemaps, deleteBasemap as deleteBasemapApi, getBasemapPayload } from "../runtime/basemapLibrary.js";
+import { fetchCommunityBasemaps, installCommunityBasemap, publishBasemap } from "../runtime/communityBasemaps.js";
 
 const overlay = {
   position: "fixed",
@@ -100,7 +101,7 @@ const closeBtn = {
   width: "2rem",
 };
 
-const BasemapCard = ({ title, imageUrl, active, badge, onClick, onDelete }) => (
+const BasemapCard = ({ title, imageUrl, active, badge, onClick, onDelete, onPublish }) => (
   <div
     style={{ ...cardSurface, outline: active ? "2px solid #7c3aed" : "none", outlineOffset: "-2px" }}
     onClick={onClick}
@@ -129,6 +130,16 @@ const BasemapCard = ({ title, imageUrl, active, badge, onClick, onDelete }) => (
         <span style={{ position: "absolute", right: 6, top: 6, background: "rgba(124,58,237,0.9)", borderRadius: "999px", fontSize: "0.62rem", fontWeight: 700, padding: "0.1rem 0.4rem" }}>
           ✓ In use
         </span>
+      )}
+      {onPublish && (
+        <button
+          type="button"
+          title="Share this basemap to the community"
+          onClick={(e) => { e.stopPropagation(); onPublish(); }}
+          style={{ position: "absolute", left: 6, bottom: 6, background: "rgba(124,58,237,0.85)", border: "1px solid rgba(167,139,250,0.5)", borderRadius: "999px", color: "#fff", cursor: "pointer", fontSize: "0.7rem", height: "1.5rem", width: "1.5rem", lineHeight: 1 }}
+        >
+          ⤴
+        </button>
       )}
       {onDelete && (
         <button
@@ -160,15 +171,36 @@ const BasemapPicker = ({
   const [mine, setMine] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [community, setCommunity] = useState([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState(null);
+  const [communityLoaded, setCommunityLoaded] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
   const refresh = () => {
     setLoading(true);
     listBasemaps().then((list) => setMine(Array.isArray(list) ? list : [])).finally(() => setLoading(false));
   };
 
+  const loadCommunity = (force = false) => {
+    setCommunityLoading(true);
+    setCommunityError(null);
+    fetchCommunityBasemaps({ force })
+      .then((p) => setCommunity(Array.isArray(p) ? p : []))
+      .catch((e) => setCommunityError(e.message))
+      .finally(() => {
+        setCommunityLoading(false);
+        setCommunityLoaded(true);
+      });
+  };
+
   useEffect(() => {
     if (open) refresh();
   }, [open]);
+
+  useEffect(() => {
+    if (open && tab === "community" && !communityLoaded) loadCommunity();
+  }, [open, tab, communityLoaded]);
 
   if (!open) return null;
 
@@ -188,6 +220,29 @@ const BasemapPicker = ({
   const handleDelete = async (id) => {
     await deleteBasemapApi(id).catch(() => {});
     refresh();
+  };
+
+  const handlePublish = async (bm) => {
+    try {
+      const payload = await getBasemapPayload(bm.id);
+      publishBasemap(bm, payload);
+    } catch (e) {
+      window.alert(`Could not prepare that basemap for publishing: ${e?.message || e}`);
+    }
+  };
+
+  const handleInstall = async (post) => {
+    if (busyId) return;
+    setBusyId(post.id);
+    try {
+      await installCommunityBasemap(post);
+      refresh();
+      setTab("mine");
+    } catch (e) {
+      window.alert(`Install failed: ${e?.message || e}`);
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -248,6 +303,7 @@ const BasemapPicker = ({
                         badge={bm.kind === "vector" ? "vector" : undefined}
                         onClick={() => { onSelectCustom(bm); onClose(); }}
                         onDelete={() => handleDelete(bm.id)}
+                        onPublish={() => handlePublish(bm)}
                       />
                     ))}
                   </div>
@@ -255,8 +311,67 @@ const BasemapPicker = ({
               </div>
             </>
           ) : (
-            <div style={{ ...dim, padding: "2.5rem 1rem", textAlign: "center", fontSize: "0.9rem" }}>
-              🌐 Community basemaps are coming soon — browse and install basemaps shared by other players here.
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem" }}>
+                <div style={{ ...rowTitle, margin: 0 }}>Community basemaps</div>
+                <div style={{ flex: 1 }} />
+                <a
+                  href="https://github.com/Arkniem/pax-historia-scenarios/issues?q=is%3Aissue+is%3Aopen+label%3Abasemap"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...tabBtn(false), textDecoration: "none" }}
+                >
+                  Open hub ↗
+                </a>
+                <button type="button" style={tabBtn(false)} onClick={() => loadCommunity(true)}>↻ Refresh</button>
+              </div>
+              {communityError && <div style={{ ...dim, color: "#fecaca" }}>{communityError}</div>}
+              {communityLoading ? (
+                <div style={dim}>Loading community basemaps…</div>
+              ) : community.length === 0 && !communityError ? (
+                <div style={dim}>No community basemaps yet — share one of yours with the ⤴ button on a “Your basemaps” card.</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(11rem, 1fr))", gap: "0.8rem" }}>
+                  {community.map((post) => (
+                    <div key={post.id} style={{ ...cardSurface, flex: "unset", cursor: "default" }}>
+                      <div style={{ position: "relative", aspectRatio: "3 / 2", background: "#0b1020" }}>
+                        {post.coverImageUrl ? (
+                          <img
+                            src={post.coverImageUrl}
+                            alt=""
+                            loading="lazy"
+                            onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          />
+                        ) : (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", opacity: 0.5 }}>🗺️</div>
+                        )}
+                        {post.kind === "vector" && (
+                          <span style={{ position: "absolute", left: 6, top: 6, background: "rgba(0,0,0,0.55)", borderRadius: "6px", fontSize: "0.6rem", fontWeight: 700, padding: "0.1rem 0.35rem", textTransform: "uppercase" }}>vector</span>
+                        )}
+                      </div>
+                      <div style={{ padding: "0.5rem 0.6rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                        <div style={{ fontSize: "0.8rem", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{post.title}</div>
+                        <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.5)" }}>by {post.author}</div>
+                        <button
+                          type="button"
+                          disabled={!post.bundleUrl || busyId === post.id}
+                          onClick={() => handleInstall(post)}
+                          title={post.bundleUrl ? "Install into Your basemaps" : "This post has no basemap file attached"}
+                          style={{
+                            ...tabBtn(false),
+                            background: post.bundleUrl ? "rgba(124,58,237,0.35)" : "rgba(255,255,255,0.04)",
+                            cursor: post.bundleUrl && busyId !== post.id ? "pointer" : "default",
+                            opacity: post.bundleUrl ? 1 : 0.5,
+                          }}
+                        >
+                          {busyId === post.id ? "Installing…" : "⬇ Install"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
