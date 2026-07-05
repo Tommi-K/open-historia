@@ -2,6 +2,7 @@
 import React, { useCallback, useMemo, useRef } from "react";
 import Map from "react-map-gl/maplibre";
 import Nations from "./Nations";
+import CustomMapBackground from "./CustomMapBackground.jsx";
 import GlobeEffects from "./GlobeEffects.jsx";
 import RegionPopup from "../Selection/Regions";
 import CountryInfoPanel from "../Selection/CountryPanel.jsx";
@@ -9,6 +10,7 @@ import Cities from "./Cities";
 import Units from "./Units";
 import UnitPopup from "../Selection/Units";
 import {
+  DEFAULT_BASEMAP_ID,
   TERRAIN_TILE_TEMPLATE,
   basemapMaxZoom,
   basemapProtocolTemplate,
@@ -16,7 +18,6 @@ import {
   esriTileTemplate,
 } from "../../runtime/assets.js";
 import { SKYBOX_SIZE, getSkyboxUrl } from "./skybox.js";
-import { MAP_SETTING_KEYS, useMapSetting } from "../../runtime/mapSettings.js";
 
 // The high-res source goes through the ohbase protocol so ESRI's "Map Data
 // Not Yet Available" placeholders get replaced with upscaled ancestor tiles.
@@ -103,8 +104,8 @@ const buildWorldStyle = (basemapId) => ({
 
 function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
   const hasReportedInitialIdleRef = useRef(false);
-  const basemapId = useMapSetting(MAP_SETTING_KEYS.basemapStyle);
-  const worldStyle = useMemo(() => buildWorldStyle(basemapId), [basemapId]);
+  // Fixed to the ocean preset — the in-game basemap picker was removed.
+  const worldStyle = useMemo(() => buildWorldStyle(DEFAULT_BASEMAP_ID), []);
 
   const isGlobe = projection === "globe";
   const terrain = useMemo(
@@ -171,6 +172,10 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         mapStyle={worldStyle}
         onIdle={handleIdle}
       >
+        {/* Renders BEFORE Nations so its layers sit above the ESRI basemap but
+            beneath the region fills — a custom uploaded map shows through as the
+            world's backdrop while regions/borders stay on top. */}
+        <CustomMapBackground />
         <Nations isGlobe={isGlobe} />
         <Cities />
         <Units />
