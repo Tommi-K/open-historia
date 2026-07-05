@@ -9,14 +9,13 @@
 
 import Icon from "./Icon.jsx";
 import { panelSurface, inputStyle } from "./editorStyles.js";
+import { EDITOR_BASEMAPS } from "./basemaps.js";
+import { BACKGROUND_ACCEPT } from "./customBackground.js";
 
 const BASEMAPS = [
-  { v: "osm", l: "Your Basemap" },
-  { v: "light", l: "Light" },
-  { v: "dark", l: "Dark" },
-  { v: "white", l: "White" },
-  { v: "grayscale", l: "Grayscale" },
-  { v: "black", l: "Black" },
+  ...EDITOR_BASEMAPS.map((b) => ({ v: b.id, l: b.label })),
+  { v: "osm", l: "OpenStreetMap" },
+  { v: "dark", l: "None (dark)" },
 ];
 
 const SAVE = {
@@ -53,6 +52,9 @@ const BottomBar = ({
   counts,
   basemap,
   onBasemapChange,
+  onUploadBackground,
+  hasCustomBackground,
+  onClearBackground,
   name,
   onNameChange,
   saveStatus,
@@ -99,6 +101,34 @@ const BottomBar = ({
           ))}
         </select>
       </div>
+
+      <label
+        title="Upload a custom background: GeoJSON, KML/KMZ, Shapefile, GeoTIFF, PMTiles, or an image (PNG/JPG/SVG)"
+        style={{ ...inputStyle, width: "auto", padding: "6px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+      >
+        <Icon name="pin" size={13} style={{ opacity: 0.7 }} />
+        Upload
+        <input
+          type="file"
+          accept={BACKGROUND_ACCEPT}
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) onUploadBackground?.(file);
+          }}
+        />
+      </label>
+      {hasCustomBackground && (
+        <button
+          type="button"
+          title="Remove the custom background"
+          onClick={() => onClearBackground?.()}
+          style={{ ...inputStyle, width: "auto", padding: "6px 9px", cursor: "pointer" }}
+        >
+          ✕
+        </button>
+      )}
 
       <input
         value={name}
