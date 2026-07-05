@@ -1463,6 +1463,9 @@ const LibraryTopBar = () => {
         customCities: seed.world?.customCities ?? false,
         author: seed.world?.author ?? "",
         mapCredit: seed.world?.mapCredit ?? "",
+        // Custom map background descriptor (kind + placement); null clears it. The
+        // heavy payload goes to the backgroundData asset just below.
+        background: seed.world?.background ?? null,
       },
       game: {
         ...currentGame,
@@ -1494,6 +1497,20 @@ const LibraryTopBar = () => {
         type: "application/json",
       }),
     );
+
+    // The custom background's heavy payload (image data URL / vector GeoJSON) is a
+    // separate scenario asset so world.json stays light. Clear it when the map has
+    // no background, so re-applying a map that dropped its background doesn't leave
+    // a stale image behind.
+    if (seed.backgroundData) {
+      await uploadScenarioAsset(
+        scenarioId,
+        "backgroundData",
+        new Blob([JSON.stringify(seed.backgroundData)], { type: "application/json" }),
+      );
+    } else {
+      await clearScenarioAsset(scenarioId, "backgroundData").catch(() => {});
+    }
 
     // Create + activate a fresh game so the running map reflects the edit. Relying
     // on the player finishing a follow-up picker left the old active game (and old
