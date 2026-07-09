@@ -15,6 +15,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import url from "url";
+import { resolveChildPath } from "./security.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -48,8 +49,10 @@ const normalizeId = (raw, fallback = "basemap") => {
   return base || fallback;
 };
 
-const metaPath = (id) => path.join(BASEMAPS_DIR, `${id}.json`);
-const payloadPath = (id) => path.join(BASEMAPS_DIR, `${id}.payload.json`);
+// get/delete pass the raw route :id here (only create normalizes), so the
+// shared containment guard keeps ..%2f..%2f from escaping BASEMAPS_DIR.
+const metaPath = (id) => resolveChildPath(BASEMAPS_DIR, `${id}.json`, "basemap id");
+const payloadPath = (id) => resolveChildPath(BASEMAPS_DIR, `${id}.payload.json`, "basemap id");
 
 const getManifest = () => {
   const m = readJson(MANIFEST_PATH, null);
@@ -99,10 +102,11 @@ export const findBasemapIdByHash = (hash) => {
   return id && fs.existsSync(metaPath(id)) ? id : null;
 };
 
-// Hash the payload so identical basemaps dedupe. Prefer a client-supplied hash
-// (it already computed one for the community-dedup check) but verify shape.
-const hashPayload = (payload, supplied) => {
-  if (typeof supplied === "string" && /^[a-f0-9]{16,64}$/i.test(supplied)) return supplied.toLowerCase();
+// Hash the payload so identical basemaps dedupe. Always compute it server-side:
+// trusting a client-supplied hash (even shape-checked) let a caller store a
+// basemap under an arbitrary hash and poison the dedup index, so a later
+// genuine upload that hashed to the same value was silently discarded.
+const hashPayload = (payload) => {
   const canonical = payload?.dataUrl ?? JSON.stringify(payload?.geojson ?? payload ?? null);
   return crypto.createHash("sha256").update(String(canonical)).digest("hex");
 };
@@ -114,7 +118,7 @@ export const createBasemap = (body = {}) => {
   if (!payload || (kind === "image" && !payload.dataUrl) || (kind === "vector" && !payload.geojson)) {
     throw new Error("Basemap payload missing (need { dataUrl } for image or { geojson } for vector).");
   }
-  const contentHash = hashPayload(payload, body.contentHash);
+  const contentHash = hashPayload(payload);
 
   // Dedup: an identical basemap already in the library is reused, not duplicated.
   const existingId = findBasemapIdByHash(contentHash);
