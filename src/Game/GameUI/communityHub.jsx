@@ -109,7 +109,6 @@ const parsePost = (issue, installsByFile) => {
     // title does nothing.
     official: OFFICIAL_ASSOCIATIONS.has(issue.author_association),
     upvotes: issue.reactions?.["+1"] ?? 0,
-    plays: issue.reactions?.rocket ?? 0,
     comments: issue.comments ?? 0,
     description: description.length > 200 ? `${description.slice(0, 197)}...` : description,
     bundleUrl,
@@ -249,18 +248,18 @@ const ScenarioCard = ({ post, busy, onImport, onSelect }) => (
       {post.installs != null && (
         <span title="Installs (downloads of the scenario file, counted by GitHub)" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.76rem" }}>⬇ {post.installs}</span>
       )}
-      <span title="Played (🚀 reactions on the hub post)" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.76rem" }}>🚀 {post.plays}</span>
       <span title="Liked (👍 reactions on the hub post)" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.76rem" }}>👍 {post.upvotes}</span>
-      <span title="Comments" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.76rem" }}>💬 {post.comments}</span>
+      <span title="Comments on the hub post" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.76rem" }}>💬 {post.comments}</span>
       <div style={{ flex: 1 }} />
       <a
         href={post.url}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(event) => event.stopPropagation()}
+        title="Open the GitHub post to 👍 like or 💬 comment"
         style={{ ...pillButton, minHeight: "1.8rem", textDecoration: "none" }}
       >
-        View ↗
+        👍 Like ↗
       </a>
       <button
         type="button"
@@ -357,11 +356,13 @@ const ScenarioDetail = ({ post, busy, onImport, onBack, notice, error }) => (
       by {post.author} · {new Date(post.createdAt).toLocaleDateString()}
     </div>
 
-    <div style={{ display: "flex", gap: "1.1rem", marginBottom: "1rem" }}>
+    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "1.1rem", marginBottom: "0.55rem" }}>
       {post.installs != null && <span style={detailStat}>⬇ {post.installs} installs</span>}
-      <span style={detailStat}>🚀 {post.plays} played</span>
-      <span style={detailStat}>👍 {post.upvotes} liked</span>
-      <span style={detailStat}>💬 {post.comments} comments</span>
+      <a href={post.url} target="_blank" rel="noopener noreferrer" title="Like this scenario on its GitHub post" style={{ ...detailStat, textDecoration: "none" }}>👍 {post.upvotes} liked</a>
+      <a href={post.url} target="_blank" rel="noopener noreferrer" title="Comment on its GitHub post" style={{ ...detailStat, textDecoration: "none" }}>💬 {post.comments} comments</a>
+    </div>
+    <div style={{ color: "rgba(196,181,253,0.9)", fontSize: "0.78rem", marginBottom: "1rem" }}>
+      Likes and comments live on the scenario's GitHub post — tap 👍 or 💬 above (or the button below) to open it and react there.
     </div>
 
     <p style={{ color: "rgba(240,244,255,0.8)", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: "1.3rem" }}>
@@ -390,7 +391,7 @@ const ScenarioDetail = ({ post, busy, onImport, onBack, notice, error }) => (
         {busy ? "Importing…" : "▶ Import & Play"}
       </button>
       <a href={post.url} target="_blank" rel="noopener noreferrer" style={{ ...pillButton, textDecoration: "none" }}>
-        View on GitHub ↗
+        👍 Like / 💬 Comment ↗
       </a>
     </div>
   </div>
@@ -453,15 +454,14 @@ const CommunityPanel = ({ onImported }) => {
     if (!posts) return null;
     const pinned = posts.filter((post) => post.pinned);
     // Installs (real download counts) rank first; posts GitHub can't count
-    // (attachment bundles) fall back to their 🚀 played reactions.
+    // (attachment bundles) fall back to likes, then recency.
     const byInstalls = [...posts].sort(
       (a, b) =>
         (b.installs ?? -1) - (a.installs ?? -1) ||
-        b.plays - a.plays ||
         b.upvotes - a.upvotes ||
         b.createdAt.localeCompare(a.createdAt),
     );
-    const byLikes = [...posts].sort((a, b) => b.upvotes - a.upvotes || b.plays - a.plays || b.createdAt.localeCompare(a.createdAt));
+    const byLikes = [...posts].sort((a, b) => b.upvotes - a.upvotes || b.createdAt.localeCompare(a.createdAt));
     const byRecent = [...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return { pinned, byInstalls, byLikes, byRecent };
   }, [posts]);
@@ -506,7 +506,7 @@ const CommunityPanel = ({ onImported }) => {
       if (stillRelevant) {
         setNotice(
           `Imported "${details?.scenario?.name ?? post.title}" — it's in your Scenarios tab. ` +
-            `Enjoyed it? React 🚀 (played it) or 👍 (liked it) on the hub post.`,
+            `Enjoyed it? Open its hub post (👍 Like ↗) and hit 👍 to like or 💬 to comment.`,
         );
       }
       onImported?.(details);
@@ -583,7 +583,7 @@ const CommunityPanel = ({ onImported }) => {
         <>
           <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.9rem" }}>
             <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.78rem" }}>
-              Community scenarios from the hub — ⬇ = installs (counted automatically), 🚀 = played it, 👍 = liked it (react on the post to vote).
+              Community scenarios from the hub — ⬇ = installs (counted automatically), 👍 = likes. Open any post to 👍 like or 💬 comment on GitHub.
               {" "}<span style={{ color: "#c4b5fd" }}>Purple = verified official post.</span>
             </div>
             <div style={{ flex: 1 }} />
