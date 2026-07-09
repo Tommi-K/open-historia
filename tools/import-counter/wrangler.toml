@@ -9,4 +9,4 @@ compatibility_date = "2024-09-01"
 # then paste the printed id below (replace PASTE_KV_NAMESPACE_ID).
 [[kv_namespaces]]
 binding = "IMPORTS"
-id = "PASTE_KV_NAMESPACE_ID"
+id = "666b3ec9f2744a91a812284927a1a290"

@@ -648,9 +648,12 @@ app.get("/api/hub/file", async (req, res) => {
 // tools/import-counter/) so the hub owner can see how many people imported each
 // scenario, including attachment scenarios GitHub can't count. Deduped per
 // install: only the FIRST successful import of a given bundle counts, so a
-// re-import never inflates the number. Disabled (silent no-op) until
-// OH_IMPORT_COUNTER_URL is set to the deployed Worker URL.
-const IMPORT_COUNTER_URL = (process.env.OH_IMPORT_COUNTER_URL || "").replace(/\/+$/, "");
+// re-import never inflates the number. Points at the hub's deployed counter
+// Worker (tools/import-counter); OH_IMPORT_COUNTER_URL overrides it, and an
+// empty value disables the ping entirely (silent no-op).
+const IMPORT_COUNTER_URL = (
+  process.env.OH_IMPORT_COUNTER_URL ?? "https://oh-import-counter.nichojkrol.workers.dev"
+).replace(/\/+$/, "");
 const IMPORT_PING_DIR = path.join(__dirname, "data", "import-pings");
 app.post("/api/hub/import-log", jsonParser, (req, res) => {
   res.json({ ok: true }); // ack at once — telemetry must never delay or fail the import
