@@ -1,4 +1,5 @@
 /*! Open Historia — portions (CORS, AI relay, shutdown endpoint, hub proxy) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
+import crypto from "crypto";
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -552,14 +553,43 @@ app.post("/api/server/shutdown", (_req, res) => {
   setTimeout(() => process.exit(0), 300);
 });
 
+// Allow the fixed GitHub hosts plus ANY *.githubusercontent.com CDN host.
+// GitHub serves release/attachment downloads off a rotating family of those
+// hosts (objects., release-assets., …) — release assets now redirect to
+// release-assets.githubusercontent.com, which a fixed list missed and wrongly
+// rejected as "redirected off GitHub". Every *.githubusercontent.com host is
+// GitHub-controlled, so this stays safe against redirect-to-internal SSRF.
 const isAllowedHubUrl = (candidate) =>
-  candidate.protocol === "https:" && HUB_DOWNLOAD_HOSTS.has(candidate.hostname);
+  candidate.protocol === "https:" &&
+  (HUB_DOWNLOAD_HOSTS.has(candidate.hostname) || candidate.hostname.endsWith(".githubusercontent.com"));
+
+// Cache fetched bundles on disk so re-importing the same scenario doesn't keep
+// bumping its GitHub download count — the second import onward is served locally
+// and never touches GitHub. Bundle URLs are immutable (a new version gets a new
+// URL), so a cached copy can't go stale. Keyed on the requested URL.
+const HUB_CACHE_DIR = path.join(__dirname, "data", "hub-cache");
+const hubCachePaths = (fileUrl) => {
+  const hash = crypto.createHash("sha256").update(fileUrl).digest("hex");
+  return { body: path.join(HUB_CACHE_DIR, `${hash}.body`), type: path.join(HUB_CACHE_DIR, `${hash}.type`) };
+};
 
 app.get("/api/hub/file", async (req, res) => {
   try {
-    let current = new URL(String(req.query.url ?? ""));
+    const fileUrl = String(req.query.url ?? "");
+    let current = new URL(fileUrl);
     if (!isAllowedHubUrl(current)) {
       return sendError(res, 400, new Error("Only GitHub-hosted scenario files can be fetched."));
+    }
+
+    // Already fetched once? Serve the cached copy without touching GitHub, so a
+    // re-import by the same person doesn't bump the scenario's download count.
+    const cache = hubCachePaths(fileUrl);
+    if (fs.existsSync(cache.body)) {
+      let cachedType = "application/octet-stream";
+      try { cachedType = fs.readFileSync(cache.type, "utf8") || cachedType; } catch { /* default */ }
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", cachedType);
+      return fs.createReadStream(cache.body).pipe(res);
     }
 
     // Follow redirects manually so every hop is re-checked against the host
@@ -590,12 +620,23 @@ app.get("/api/hub/file", async (req, res) => {
       return sendError(res, 413, new Error("Scenario bundle is too large."));
     }
 
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    // Cache for next time — best-effort; a cache write failure must not fail the
+    // import. Temp file + rename so a concurrent serve never sees a half-written body.
+    try {
+      fs.mkdirSync(HUB_CACHE_DIR, { recursive: true });
+      fs.writeFileSync(`${cache.body}.tmp`, buffer);
+      fs.renameSync(`${cache.body}.tmp`, cache.body);
+      fs.writeFileSync(cache.type, contentType);
+    } catch (cacheError) {
+      console.warn("[hub] cache write failed:", cacheError.message);
+    }
+
     res.setHeader("Cache-Control", "no-store");
     // Pass the upstream content type through untouched. JSON bundles still parse
     // via response.json() (which ignores the header), while binary bundles (.zip)
-    // and raw basemap images (.png/.jpg) arrive byte-for-byte — the old text()
-    // path UTF-8-decoded them and corrupted every non-text byte.
-    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+    // and raw basemap images (.png/.jpg) arrive byte-for-byte.
+    res.setHeader("Content-Type", contentType);
     res.send(buffer);
   } catch (error) {
     sendError(res, 502, error);
