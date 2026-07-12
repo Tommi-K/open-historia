@@ -409,12 +409,12 @@ async function callOpenAIStyleChatCompletions({
     tokenLimitField = "max_tokens",
 }) {
     let structuredMode = tool ? "tool" : "text";
+    let disableToolReasoning = false;
 
     let attempt = 1;
     while (attempt <= retries) {
         const requestCustomParams = { ...customParams };
-        if (structuredMode === "tool") {
-            delete requestCustomParams.reasoning_effort;
+        if (disableToolReasoning) {
             delete requestCustomParams.reasoning;
         }
         const requestSystemPrompt = structuredMode === "text_json" || structuredMode === "json_object"
@@ -432,6 +432,7 @@ async function callOpenAIStyleChatCompletions({
                 ...(getReasoningEnabled() && structuredMode !== "tool" ? { reasoning_effort: "medium" } : {}),
                 [tokenLimitField]: Math.max(8192, Number(maxTokens) || 0),
                 ...requestCustomParams,
+                ...(structuredMode === "tool" && disableToolReasoning ? { reasoning_effort: "none" } : {}),
                 ...(structuredMode === "tool" ? {
                     tools: [{ type: "function", function: {
                         name: tool.name,
@@ -452,9 +453,22 @@ async function callOpenAIStyleChatCompletions({
             },
         });
 
-        if ([400, 422].includes(response.status) && structuredMode === "tool" && allowJsonSchemaFallback) {
-            structuredMode = "json_schema";
-            continue;
+        if ([400, 422].includes(response.status) && structuredMode === "tool") {
+            const payload = await readErrorPayload(response);
+            const errorMessage = extractErrorMessage(payload, `${providerLabel} request failed (${response.status})`);
+            const reasoningConflict = /function tools.*reasoning_effort.*not supported|reasoning_effort.*not supported.*function tools/i.test(errorMessage);
+
+            if (!disableToolReasoning && reasoningConflict) {
+                disableToolReasoning = true;
+                continue;
+            }
+
+            if (allowJsonSchemaFallback) {
+                structuredMode = "json_schema";
+                continue;
+            }
+
+            throw new Error(errorMessage);
         }
 
         if ([400, 422].includes(response.status) && structuredMode === "json_schema" && allowJsonSchemaFallback) {
