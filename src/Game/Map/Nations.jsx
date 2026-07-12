@@ -38,14 +38,19 @@ const buildCountryTextSize = (multiplier = 1, correctForGlobe = false) => {
   const scale = correctForGlobe ? ["*", multiplier, GLOBE_LAT_CORRECTION] : multiplier;
 
   return [
-    "interpolate", ["exponential", 2], ["zoom"],
-    0, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -16]]],
-    4, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -12]]],
-    8, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -8]]],
-    12, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -4]]],
-    16, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 0]]],
-    20, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 4]]],
-    24, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 8]]],
+    // MapLibre rejects symbol text sizes at 255 or above.
+    "min",
+    254,
+    [
+      "interpolate", ["exponential", 2], ["zoom"],
+      0, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -16]]],
+      4, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -12]]],
+      8, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -8]]],
+      12, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, -4]]],
+      16, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 0]]],
+      20, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 4]]],
+      24, ["*", scale, ["*", ["get", "areaScale"], ["^", 2, 8]]],
+    ],
   ];
 };
 
