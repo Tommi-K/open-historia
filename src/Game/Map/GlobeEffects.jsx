@@ -6,6 +6,7 @@ import {
   globeTransitionOpacity,
   normalizeLongitude,
   projectGlobeSun,
+  sunLimbBloom,
 } from "./globeSunMath.js";
 import {
   drawGlobeLighting,
@@ -56,15 +57,25 @@ const GlobeEffects = ({ active }) => {
     let lastCelestialDraw = -Infinity;
     let starsVisible = false;
     let lightingVisible = false;
+    let autoRotationActive = false;
     const sunElement = document.getElementById("oh-globe-sun");
     const starsCanvas = document.getElementById("oh-globe-stars");
     const lightingCanvas = document.getElementById("oh-globe-lighting");
+    const mapCanvas = mapInstance.getCanvas();
 
     const markInteraction = () => {
       lastInteraction = performance.now();
+      autoRotationActive = false;
     };
     const interactionEvents = ["dragstart", "zoomstart", "rotatestart", "pitchstart", "wheel"];
     for (const event of interactionEvents) mapInstance.on(event, markInteraction);
+    const interruptAutoRotation = () => {
+      markInteraction();
+      const wasMoving = mapInstance.isMoving();
+      mapInstance.stop?.();
+      if (!wasMoving) syncVisuals(true);
+    };
+    mapCanvas.addEventListener("pointerdown", interruptAutoRotation, true);
 
     const syncVisuals = (forceLighting = false) => {
       if (disposed || contextLost || !mapInstance.style) return;
@@ -95,6 +106,7 @@ const GlobeEffects = ({ active }) => {
       }
 
       if (sunElement) {
+        const sunDirection = directionFromLngLat(sunWorldPosition.lng, sunWorldPosition.lat);
         const projected = projectGlobeSun({
           sunLng: sunWorldPosition.lng,
           sunLat: sunWorldPosition.lat,
@@ -105,8 +117,19 @@ const GlobeEffects = ({ active }) => {
         if (projected
           && projected.x > -180 && projected.x < width + 180
           && projected.y > -180 && projected.y < height + 180) {
+          const bloom = sunLimbBloom({
+            sunX: projected.x,
+            sunY: projected.y,
+            cameraPosition: mapInstance.transform?.cameraPosition,
+            matrix,
+            width,
+            height,
+          });
           sunElement.style.opacity = String(projectionTransition);
           sunElement.style.transform = `translate3d(${projected.x.toFixed(1)}px, ${projected.y.toFixed(1)}px, 0) translate(-50%, -50%) scale(${projected.scale.toFixed(3)})`;
+          const glowRadius = 12 + bloom * 28;
+          const glowOpacity = 0.65 + bloom * 0.3;
+          sunElement.style.filter = `drop-shadow(0 0 ${glowRadius.toFixed(1)}px rgba(255,218,145,${glowOpacity.toFixed(3)}))`;
         } else {
           sunElement.style.opacity = "0";
         }
@@ -127,6 +150,7 @@ const GlobeEffects = ({ active }) => {
             width,
             height,
             opacity: projectionTransition,
+            immediate: autoRotationActive || mapInstance.isMoving(),
           });
         } else if (!lightingTimer) {
           lightingTimer = window.setTimeout(() => {
@@ -147,7 +171,8 @@ const GlobeEffects = ({ active }) => {
       const dt = now - lastTick;
       lastTick = now;
       const idle = now - lastInteraction > INTERACTION_GRACE_MS;
-      if (idle && !autoRotateDisabled && !mapInstance.isMoving()) {
+      autoRotationActive = idle && !autoRotateDisabled && !mapInstance.isMoving();
+      if (autoRotationActive) {
         const center = mapInstance.getCenter();
         mapInstance.jumpTo({ center: [center.lng - ROTATION_DEG_PER_MS * dt, center.lat] });
       }
@@ -155,8 +180,11 @@ const GlobeEffects = ({ active }) => {
     };
 
     const handleRender = () => syncVisuals(false);
+    const handleMovementEnd = () => {
+      if (!autoRotationActive) syncVisuals(true);
+    };
     mapInstance.on("render", handleRender);
-    const mapCanvas = mapInstance.getCanvas();
+    mapInstance.on("moveend", handleMovementEnd);
     const handleContextLost = () => {
       contextLost = true;
       cancelAnimationFrame(frameId);
@@ -186,7 +214,9 @@ const GlobeEffects = ({ active }) => {
       cancelAnimationFrame(frameId);
       clearTimeout(lightingTimer);
       mapInstance.off("render", handleRender);
+      mapInstance.off("moveend", handleMovementEnd);
       for (const event of interactionEvents) mapInstance.off(event, markInteraction);
+      mapCanvas.removeEventListener("pointerdown", interruptAutoRotation, true);
       mapCanvas.removeEventListener("webglcontextlost", handleContextLost);
       mapCanvas.removeEventListener("webglcontextrestored", handleContextRestored);
       releaseCelestialStars(starsCanvas);

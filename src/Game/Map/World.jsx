@@ -250,7 +250,7 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
             opacity: 0,
             background: "radial-gradient(circle, #fff 0 7%, #fff6cf 8% 12%, rgba(255,219,142,0.8) 15%, rgba(255,185,93,0.26) 31%, rgba(255,154,65,0.07) 52%, transparent 72%)",
             filter: "drop-shadow(0 0 12px rgba(255,218,145,0.75))",
-            willChange: "transform",
+            willChange: "transform, opacity, filter",
           }}
         />
       )}
