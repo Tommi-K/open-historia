@@ -7,6 +7,7 @@ export const renderGlobeLightingPixels = ({
   pixelWidth,
   pixelHeight,
   opacity,
+  outputPixels,
 }) => {
   const sphereRadius = 1;
   const smoothstep = (minimum, maximum, value) => {
@@ -52,7 +53,11 @@ export const renderGlobeLightingPixels = ({
     result[15] = (a20 * b03 - a21 * b01 + a22 * b00) * inverseDeterminant;
     return result;
   };
-  const pixels = new Uint8ClampedArray(pixelWidth * pixelHeight * 4);
+  const outputLength = pixelWidth * pixelHeight * 4;
+  const pixels = outputPixels?.length === outputLength
+    ? outputPixels
+    : new Uint8ClampedArray(outputLength);
+  pixels.fill(0);
   const inverse = invertMatrix(matrix);
   if (!inverse) return pixels;
   const cameraX = cameraPosition[0];
@@ -136,6 +141,11 @@ export const buildGlobeLightingWorkerSource = () => `
   const renderGlobeLightingPixels = ${renderGlobeLightingPixels.toString()};
   self.onmessage = ({ data }) => {
     const pixels = renderGlobeLightingPixels(data);
-    self.postMessage({ pixels: pixels.buffer, width: data.pixelWidth, height: data.pixelHeight }, [pixels.buffer]);
+    self.postMessage({
+      pixels: pixels.buffer,
+      width: data.pixelWidth,
+      height: data.pixelHeight,
+      requestId: data.requestId,
+    }, [pixels.buffer]);
   };
 `;
