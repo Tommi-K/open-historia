@@ -49,6 +49,19 @@ const MapEditor = lazy(() => import("../../Editor/MapEditor.jsx"));
 const CommunityPanel = lazy(() => import("./communityHub.jsx"));
 
 const BAR_HEIGHT = 64;
+const TECHNICAL_OWNER_CODES = new Set([
+  "NA",
+  "XCA",
+  "Z01",
+  "Z02",
+  "Z03",
+  "Z04",
+  "Z05",
+  "Z06",
+  "Z07",
+  "Z08",
+  "Z09",
+]);
 
 // Set by the mounted LibraryTopBar; lets the no-game gate open a tab.
 let _openLibraryTab = null;
@@ -1004,11 +1017,15 @@ const LibraryTopBar = () => {
   // back to every country for scenarios without an owner list.
   const buildScenarioCountryOptions = (world, allCountries, nameOverrides = {}) => {
     const entries = Array.isArray(allCountries) ? allCountries : [];
-    const list = Array.from(new Map(
-      entries
-        .filter((entry) => entry?.code && entry?.name)
-        .map((entry) => [entry.code, entry]),
-    ).values());
+    const entriesByCode = new Map();
+    for (const entry of entries) {
+      const code = String(entry?.code ?? "").trim();
+      const name = String(entry?.name ?? "").trim();
+      if (!code || !name || TECHNICAL_OWNER_CODES.has(code)) continue;
+      const existing = entriesByCode.get(code);
+      if (!existing || existing.name === code) entriesByCode.set(code, { code, name });
+    }
+    const list = [...entriesByCode.values()];
     const ownerCodes = Array.isArray(world?.ownerCodes) ? world.ownerCodes : null;
     const nameByCode = new Map(list.map((entry) => [entry.code, entry.name]));
     const polity = world?.polityOverrides ?? {};
@@ -1022,7 +1039,9 @@ const LibraryTopBar = () => {
     };
     const options = !ownerCodes || !ownerCodes.length
       ? list.map((entry) => resolveOption(entry.code, entry.name))
-      : ownerCodes.map((code) => resolveOption(code, nameByCode.get(code) || code));
+      : ownerCodes
+        .filter((code) => !TECHNICAL_OWNER_CODES.has(code))
+        .map((code) => resolveOption(code, nameByCode.get(code) || code));
     return options
       .sort((left, right) => left.name.localeCompare(right.name));
   };
