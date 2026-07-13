@@ -400,6 +400,40 @@ const buildPlayerPolityRegionsText = async (bundle) => {
   return playerRegions.join(", ");
 };
 
+const STAT_SHEETS_STORAGE_KEY = "oh-stat-sheets";
+
+const readStoredStatSheets = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STAT_SHEETS_STORAGE_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+};
+
+const buildPlayerPolityReputationText = async (bundle) => {
+  const playerCode = normalizeString(bundle.game.country);
+  if (!playerCode) {
+    return "No player polity is currently set.";
+  }
+
+  // Authoritative source is world state, evolved by the AI each turn. Fall back
+  // to the last stat sheet the player viewed (to seed a sensible starting value),
+  // then to a neutral 50 — so this is never "unknown".
+  const world = bundle.world && typeof bundle.world === "object" ? bundle.world : {};
+  let reputation = Number(world.internationalReputation?.[playerCode]);
+  if (!Number.isFinite(reputation)) {
+    const gameKey = normalizeString(bundle.game.id || bundle.game.name || "game");
+    reputation = Number(readStoredStatSheets()[`${gameKey}:${playerCode}`]?.sheet?.indices?.internationalReputation);
+  }
+  if (!Number.isFinite(reputation)) {
+    reputation = 50;
+  }
+
+  const clamped = Math.max(0, Math.min(100, Math.round(reputation)));
+  const band = clamped >= 70 ? "well-regarded" : clamped >= 40 ? "mixed" : "poor";
+  return `International reputation: ${clamped}/100 (${band}).`;
+};
+
 const resolveHelperValues = (helperTemplates, variables) => {
   let resolved = {};
 
@@ -514,6 +548,7 @@ const buildTemplateVariables = async (
     plannedActions: buildActionHistoryText(bundle.actions),
     playerPolity: bundle.game.country || "Unknown polity",
     playerBattalionSummaries: buildUnitsSummaryText(bundle.world),
+    playerPolityReputationContext: await buildPlayerPolityReputationText(bundle),
     // Simulation tasks additionally get the reach/logistics doctrine — but
     // only when forces are actually in play this turn (see the builder).
     unitsSummary:
@@ -578,6 +613,13 @@ const runJsonTask = async (taskKey, { fallback, timeoutMs = 120000, userMessage,
     systemPrompt = `${systemPrompt}\n\n${difficultyDirective(game.difficulty)}`;
   } catch {
     // Without game data the task still runs at its default temperament.
+  }
+
+  if (["actions", "jumpForward", "autoJumpForward", "catalystCreation", "catalystExecutor"].includes(taskKey)) {
+    const reputationContext = normalizeString(variables.playerPolityReputationContext);
+    if (reputationContext) {
+      systemPrompt = `${systemPrompt}\n\n[International Reputation]\n${reputationContext}\nLow international reputation should reduce trade, trust, and coalition support, and should make nearby rivals more likely to sanction, isolate, or form balancing alliances. High reputation should improve access, trust, and coalition-building. When events this turn change how the world regards a polity, record the new value by including a "reputation" field (an integer 0-100) on that polity's impacts.polityChanges entry: aggression, broken treaties, and atrocities lower it; cooperation, aid, and honored commitments raise it. Only include reputation when it actually changes.`;
+    }
   }
 
   try {
@@ -1202,7 +1244,7 @@ export const generateCountryStatSheet = async ({ code, name } = {}) => {
     `Respond with ONLY a JSON object — no prose, no markdown fences — exactly this shape:\n` +
     `{"capital":"city","continent":"continent","government":"system · ideology","leader":"head of state/government",` +
     `"stability":0-100 integer,` +
-    `"indices":{"sovereignty":0-100,"foodAutonomy":0-100,"energyAutonomy":0-100,"economicIndependence":0-100,"internalSecurity":0-100},` +
+    `"indices":{"sovereignty":0-100,"foodAutonomy":0-100,"energyAutonomy":0-100,"economicIndependence":0-100,"internalSecurity":0-100,"internationalReputation":0-100},` +
     `"economy":{"gdp":"9 B$","gdpGrowth":"+5.2% / yr","gdpPerCapita":"796 $","currency":"XOF",` +
     `"inflation":"0.3%","unemployment":"1%","publicDebt":"47.5% GDP","budgetBalance":"-3.7% GDP"},` +
     `"gdpBreakdown":{"agriculture":24,"industry":24,"services":52}}\n` +
