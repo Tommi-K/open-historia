@@ -306,9 +306,19 @@ const CONTENT_BASE = (import.meta.env.VITE_OH_PMTILES_URL || "/assets").replace(
 let defaultRegionsGeojsonPromise = null;
 const fetchDefaultRegionsGeojson = () => {
   if (!defaultRegionsGeojsonPromise) {
-    defaultRegionsGeojsonPromise = fetch(`${CONTENT_BASE}/default-regions.geojson`)
+    defaultRegionsGeojsonPromise = fetch(`${CONTENT_BASE}/default-regions.geojson`, { cache: "force-cache" })
       .then((response) => (response.ok ? response.json() : null))
-      .catch(() => null);
+      .catch(() => null)
+      .then((data) => {
+        // Never pin an empty/failed result for the whole session — a transient
+        // miss during the heavy first load would otherwise blank the political
+        // map until reload. Clear the cache so the next read retries.
+        if (!data || !Array.isArray(data.features) || data.features.length === 0) {
+          defaultRegionsGeojsonPromise = null;
+          return null;
+        }
+        return data;
+      });
   }
   return defaultRegionsGeojsonPromise;
 };
