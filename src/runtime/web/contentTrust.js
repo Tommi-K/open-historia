@@ -87,11 +87,17 @@ export const setPreferredNode = (url) => { preferredNodeUrl = url ? url.replace(
 // page probes to pick the best one, and what content fetches route through.
 export const loadDirectoryNodes = async () => {
   const [directory, live] = await Promise.all([loadDirectory(), loadLiveUrls()]);
-  const liveUrl = new Map(live.filter((n) => n && n.id && n.url && n.status === "active").map((n) => [n.id, n.url]));
-  return (directory?.nodes || [])
-    .filter((n) => n && n.id && (n.status === undefined || n.status === "active") && (!n.caps || n.caps.includes("content")))
-    .map((n) => ({ ...n, url: liveUrl.get(n.id) || n.url }))
-    .filter((n) => n.url);
+  // Auto-accept model: nodes self-register and are used automatically. The SIGNED
+  // directory is now a deny-list + control doc — any node it marks banned/paused
+  // is excluded (and its rate-limit/caps overrides applied); everything else that
+  // is live and active is allowed. Integrity is unaffected — every byte is still
+  // hash-verified — so an un-vetted node can at worst be useless, and a bad actor
+  // is removed by an admin ban published to the signed directory.
+  const control = new Map((directory?.nodes || []).filter((n) => n && n.id).map((n) => [n.id, n]));
+  return (live || [])
+    .filter((n) => n && n.id && n.url && n.status === "active")
+    .map((n) => ({ ...n, ...control.get(n.id), url: n.url }))
+    .filter((n) => n.status !== "banned" && n.status !== "paused" && (!n.caps || n.caps.includes("content")));
 };
 
 // Order candidate nodes for an asset: the connected node first, then a per-asset
