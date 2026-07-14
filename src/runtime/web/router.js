@@ -11,6 +11,7 @@ import { handleMapEditor } from "./editorStore.js";
 import { handleBasemaps } from "./basemapStore.js";
 import { handleLibrary, handleScenarios, handleGames, handleRuntimeJson, getScenarioPmtilesOverride } from "./libraryStore.js";
 import { handleLang, handleUiSettings } from "./settingsStore.js";
+import { getConnected } from "./nodeConnect.js";
 
 let installed = false;
 
@@ -100,6 +101,20 @@ const route = async (request, url) => {
   // directly (it sends CORS) and passes through the interceptor untouched.
   if (domain === "hub") {
     const base = (import.meta.env.VITE_OH_HUB_URL || "").replace(/\/$/, "");
+    // Community bundle downloads (/api/hub/file?url=…): prefer the connected
+    // content node — it fetches the GitHub-hosted bundle server-side and returns
+    // it with CORS, offloading the central hub proxy — and fall back to the Worker
+    // if there's no node or it can't serve it. Other hub calls (import-counts,
+    // import-log) stay on the Worker.
+    if (segments[0] === "file" && method === "GET") {
+      const node = getConnected();
+      if (node && node.url && !node.origin) {
+        try {
+          const r = await fetch(`${node.url.replace(/\/$/, "")}/oh/v1/hub${url.search}`);
+          if (r.ok) return r;
+        } catch { /* node down/unsupported → fall through to the Worker */ }
+      }
+    }
     if (!base) return errorResponse("Community hub proxy is not configured.", 502);
     const target = `${base}/hub/${segments.join("/")}${url.search}`;
     return method === "POST"
