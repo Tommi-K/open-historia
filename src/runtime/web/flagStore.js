@@ -3,24 +3,15 @@
 // Browser port of server/flagStore.js. Backs /api/flags* in web mode so the editor's
 // "My flags" shelf works identically on the website and the download.
 //
-// Kept in the existing `kv` store rather than a new object store on purpose: adding
-// one means bumping idb.js DB_VERSION, and that upgrade blocks (and rejects) while
-// another tab holds the old version open. A whole flag library is a few hundred KB
-// — far too small to justify a schema migration for every existing player.
+// One record per flag in its own `flags` object store — the same shape every other
+// collection here uses (scenarios, games, basemapMeta). The `kv` store is for small
+// singletons (manifests, ui-settings); a growing library kept there would mean
+// rewriting the entire set on every save.
 //
 // Hash canonicalization must stay identical to server/flagStore.js (sha256 of the
-// data URL), or the same flag dedupes on desktop and duplicates on the website.
+// data URL), or the same flag dedupes on the download and duplicates on the website.
 
-import { kvGet, kvPut } from "./idb.js";
-
-const KEY = "flags:library";
-
-const readAll = async () => {
-  const stored = await kvGet(KEY, null);
-  return Array.isArray(stored?.flags) ? stored.flags : [];
-};
-
-const writeAll = (flags) => kvPut(KEY, { version: 1, flags });
+import { STORES, idbGetAll, idbPut, idbDelete } from "./idb.js";
 
 const sha256Hex = async (str) => {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(str)));
@@ -33,12 +24,17 @@ const slug = (raw, fallback = "flag") =>
 const jsonResponse = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-const listFlags = async () => readAll();
+// Newest first, matching the server's [new, ...rest] order so both builds list the
+// library the same way.
+const listFlags = async () => {
+  const all = await idbGetAll(STORES.flags);
+  return all.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+};
 
 const createFlag = async (body = {}) => {
   const dataUrl = String(body.dataUrl || "");
   if (!dataUrl.startsWith("data:image/")) throw new Error("A flag must be an image data URL.");
-  const flags = await readAll();
+  const flags = await listFlags();
   const contentHash = await sha256Hex(dataUrl);
   const existing = flags.find((f) => f.contentHash === contentHash);
   if (existing) return existing;
@@ -56,20 +52,27 @@ const createFlag = async (body = {}) => {
     contentHash,
     createdAt: new Date().toISOString(),
   };
-  await writeAll([flag, ...flags]);
+  await idbPut(STORES.flags, flag);
   return flag;
 };
 
 const deleteFlag = async (id) => {
-  const flags = await readAll();
-  await writeAll(flags.filter((f) => f.id !== String(id ?? "")));
+  await idbDelete(STORES.flags, String(id ?? ""));
   return { id, deleted: true };
 };
 
 // Router entry: /api/flags  and  /api/flags/:id
 export const handleFlags = async ({ method, segments, body }) => {
   if (segments.length === 0 && method === "GET") return jsonResponse(await listFlags());
-  if (segments.length === 0 && method === "POST") return jsonResponse(await createFlag(body ?? {}), 201);
-  if (segments.length === 1 && method === "DELETE") return jsonResponse(await deleteFlag(segments[0]));
+  if (segments.length === 0 && method === "POST") {
+    try {
+      return jsonResponse(await createFlag(body ?? {}), 201);
+    } catch (error) {
+      return jsonResponse({ error: error.message }, 400);
+    }
+  }
+  if (segments.length === 1 && method === "DELETE") {
+    return jsonResponse(await deleteFlag(decodeURIComponent(segments[0])));
+  }
   return jsonResponse({ error: "Unsupported flag request." }, 404);
 };
