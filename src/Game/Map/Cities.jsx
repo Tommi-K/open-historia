@@ -14,17 +14,15 @@ const EMPTY_FEATURE_COLLECTION = { type: "FeatureCollection", features: [] };
 
 const populationFilter = [
     "any",
+    // Capitals: shown at all zoom levels where the city layer is visible.
     ["==", ["get", "capital"], "primary"],
-    [
-        ">",
-        ["get", "population"],
+    // Non-capital cities: only from zoom 5+, with decreasing pop threshold.
+    ["all",
+        [">=", ["zoom"], 5],
         [
-            "step", ["zoom"],
-            2500000,
-            5, 1000000,
-            6, 500000,
-            7, 250000,
-            8, 100000,
+            ">",
+            ["get", "population"],
+            ["step", ["zoom"], 1000000, 6, 500000, 7, 250000, 8, 100000],
         ],
     ],
 ];
@@ -35,9 +33,10 @@ const populationFilter = [
 // prominence tier instead: 4 = capital, 3 = major city, 2 = city, 1 = town.
 const customTierFilter = [
     "any",
-    [">=", ["get", "tier"], 3],
-    ["all", [">=", ["get", "tier"], 2], [">=", ["zoom"], 4.3]],
-    [">=", ["zoom"], 5.8],
+    ["all", [">=", ["get", "tier"], 4], [">=", ["zoom"], 3.4]],  // capitals at lowest zoom
+    ["all", [">=", ["get", "tier"], 3], [">=", ["zoom"], 5]],    // major cities from zoom 5
+    ["all", [">=", ["get", "tier"], 2], [">=", ["zoom"], 6]],    // regular cities from zoom 6
+    [">=", ["zoom"], 7],                                           // towns from zoom 7
 ];
 
 const customSortKey = ["-", ["+", ["*", ["get", "tier"], 1000000000], ["get", "population"]]];
