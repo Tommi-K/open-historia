@@ -25,7 +25,7 @@
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,X-OH-Client-IP,X-OH-Forward-Secret",
+  "Access-Control-Allow-Headers": "Content-Type,X-OH-Client-IP,X-OH-Forward-Secret,X-OH-Account",
 };
 
 const DEDUP_TTL = 60 * 60 * 24 * 365; // 1 year; bounded so KV self-cleans + recycled IPs eventually recount
@@ -48,6 +48,17 @@ function clientIp(request, env) {
   return request.headers.get("cf-connecting-ip") || "unknown";
 }
 
+// What a hit dedups on. A signed-in web account (an opaque token the trusted
+// registry Worker forwards with the shared secret) dedups per-ACCOUNT — so the
+// same person counts once for a scenario across devices/IPs. Everyone else dedups
+// per IP, exactly as before. Spoofing an account needs the FORWARD_SECRET.
+async function dedupKeyFor(request, env, id) {
+  const secretOk = env.FORWARD_SECRET && request.headers.get("x-oh-forward-secret") === env.FORWARD_SECRET;
+  const acct = secretOk ? (request.headers.get("x-oh-account") || "").trim() : "";
+  if (acct) return `h:${id}:a:${acct.slice(0, 48)}`;
+  return `h:${id}:${await ipHash(clientIp(request, env), env)}`;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -64,9 +75,9 @@ export default {
         const meta = existing.metadata || {};
         let count = Number(meta.count) || 0;
         const title = String(body.title ?? meta.title ?? "").slice(0, 200);
-        const dedupKey = `h:${id}:${await ipHash(clientIp(request, env), env)}`;
+        const dedupKey = await dedupKeyFor(request, env, id);
         if (await env.IMPORTS.get(dedupKey)) {
-          return json({ id, count, deduped: true }); // repeat IP — do not increment
+          return json({ id, count, deduped: true }); // already counted this account/IP
         }
         await env.IMPORTS.put(dedupKey, "1", { expirationTtl: DEDUP_TTL });
         count += 1;
