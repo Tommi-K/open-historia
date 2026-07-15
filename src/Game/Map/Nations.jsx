@@ -21,6 +21,7 @@ import {
 import { loadCountryLabelCollections } from "../../runtime/countryLabels.js";
 import { translateLabel } from "../../runtime/translator.js";
 import { MAP_SETTING_KEYS, useMapSetting } from "../../runtime/mapSettings.js";
+import { useWorldState } from "./useWorldState.js";
 import polygonClipping from "polygon-clipping";
 
 ensurePmtilesProtocol();
@@ -357,25 +358,21 @@ const buildOwnerFallbackColorExpression = () => ([
 const WorldMap = ({ isGlobe = false }) => {
   const { current: map } = useMap();
   const [colorMap, setColorMap] = useState({});
-  const [worldState, setWorldState] = useState({ regionOwnershipOverrides: {} });
+  const {
+    worldState,
+    worldKnown,
+    customRegions: customFlag,
+    regionOwnershipOverrides,
+    polityOverrides,
+  } = useWorldState();
   const mapDisplaySettings = {
     hideCountryLabels: useMapSetting(MAP_SETTING_KEYS.hideCountryLabels),
   };
-  // False until the first world.json read: before that we can't know whether
-  // this game uses the stock map or a custom one, so NO political layer
-  // renders — this kills the "modern world flashes, then the real map loads"
-  // effect every scenario used to show.
-  const [worldKnown, setWorldKnown] = useState(false);
   const [pointLabelData, setPointLabelData] = useState(EMPTY_FEATURE_COLLECTION);
   const [curvedLabelData, setCurvedLabelData] = useState(EMPTY_FEATURE_COLLECTION);
   const [customRegionData, setCustomRegionData] = useState(EMPTY_FEATURE_COLLECTION);
   const countriesUrl = PMTILES_PROTOCOL_URLS.countries;
   const regionsUrl = PMTILES_PROTOCOL_URLS.regions;
-  // A map authored in the editor sets world.customRegions; that flag triggers the
-  // geometry fetch. We only actually suppress the stock rendering once the custom
-  // geometry has loaded, so a missing/empty payload falls back to the base map
-  // instead of showing a blank world.
-  const customFlag = Boolean(worldState?.customRegions);
   const customActive = customFlag && Array.isArray(customRegionData?.features) && customRegionData.features.length > 0;
   // True for maps with their OWN drawn/generated geometry (region ids like
   // "reg_fmg_…", no dot) rather than re-ownership on the stock GADM tiles (ids like
@@ -420,13 +417,13 @@ const WorldMap = ({ isGlobe = false }) => {
     if (!customActive) return EMPTY_FEATURE_COLLECTION;
     return buildOwnerLabelCollection(
       customRegionData,
-      worldState?.regionOwnershipOverrides ?? {},
-      worldState?.polityOverrides ?? {},
+      regionOwnershipOverrides,
+      polityOverrides,
       (raw, owner) => translateLabel(resolveCountryDisplayName(raw, owner)),
     );
     // labelEpoch: rebuild once new translations land.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customActive, customRegionData, worldState, labelEpoch]);
+  }, [customActive, customRegionData, regionOwnershipOverrides, polityOverrides, labelEpoch]);
 
   // On custom maps the stock modern-country labels are replaced wholesale by the
   // owner labels (no more "Russia"/"Ukraine" floating over the Soviet Union).
@@ -517,31 +514,6 @@ const WorldMap = ({ isGlobe = false }) => {
       .catch((error) => console.error("Error loading colors:", error));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadWorldState = () => {
-      readJson(JSON_URLS.world, { defaultValue: {}, force: true })
-        .then((data) => {
-          if (!cancelled) {
-            setWorldState(data ?? {});
-            // Only now do we KNOW whether this world is stock or custom —
-            // nothing world-dependent renders before this (see worldKnown).
-            setWorldKnown(true);
-          }
-        })
-        .catch((error) => console.error("Error loading world state:", error));
-    };
-
-    loadWorldState();
-    const interval = setInterval(loadWorldState, 5000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
   // Load custom region geometry once, only when the active map declares it. Stock
   // scenarios never hit the network for this. Ownership recolors live via the
   // world poll above; the geometry itself is static per scenario.
@@ -596,7 +568,7 @@ const WorldMap = ({ isGlobe = false }) => {
       iso, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
     ]);
     const fallback = buildFallbackColorExpression();
-    const regionOverrideStops = Object.entries(worldState?.regionOwnershipOverrides ?? {}).flatMap(([regionId, ownerCode]) => [
+    const regionOverrideStops = Object.entries(regionOwnershipOverrides).flatMap(([regionId, ownerCode]) => [
       regionId,
       colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
@@ -616,7 +588,7 @@ const WorldMap = ({ isGlobe = false }) => {
         : fallback,
       "fill-opacity": 0.66,
     };
-  }, [colorMap, worldState]);
+  }, [colorMap, regionOwnershipOverrides]);
 
   // Fill for custom (editor) regions: a live ownership override wins, else the
   // region's own owner color, else a neutral unowned tone. Keyed on the region's
@@ -634,7 +606,7 @@ const WorldMap = ({ isGlobe = false }) => {
       ["==", ["coalesce", ["get", "owner"], ""], ""], NEUTRAL_LAND_COLOR,
       ownerMatch,
     ];
-    const overrideStops = Object.entries(worldState?.regionOwnershipOverrides ?? {}).flatMap(([regionId, ownerCode]) => [
+    const overrideStops = Object.entries(regionOwnershipOverrides).flatMap(([regionId, ownerCode]) => [
       regionId,
       colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
@@ -646,21 +618,20 @@ const WorldMap = ({ isGlobe = false }) => {
         : baseColor,
       "fill-opacity": 0.72,
     };
-  }, [colorMap, worldState]);
+  }, [colorMap, regionOwnershipOverrides]);
 
   // Region id -> current owner (live overrides win). Drives the stock-tile fill,
   // and the click handler uses it to resolve era owner/unclaimed for the popup.
   const ownerByRegionId = useMemo(() => {
     const lookup = new Map();
     if (!customActive) return lookup;
-    const overrides = worldState?.regionOwnershipOverrides ?? {};
     for (const feature of customRegionData?.features ?? []) {
       const props = feature.properties || {};
       if (!props.id) continue;
-      lookup.set(props.id, overrides[props.id] ?? props.owner ?? "");
+      lookup.set(props.id, regionOwnershipOverrides[props.id] ?? props.owner ?? "");
     }
     return lookup;
-  }, [customActive, customRegionData, worldState]);
+  }, [customActive, customRegionData, regionOwnershipOverrides]);
 
   const ownerLookupRef = useRef(new Map());
   useEffect(() => {
@@ -670,7 +641,7 @@ const WorldMap = ({ isGlobe = false }) => {
   // Stable fingerprint of the ownership map: the world poll rebuilds
   // ownerByRegionId every 5s, but border geometry only needs recomputing
   // when an owner actually changes.
-  const ownershipKey = useMemo(() => {
+  const computedOwnershipKey = useMemo(() => {
     if (!customActive || !countryBordersEnabled()) return "";
     let key = "";
     for (const [regionId, owner] of ownerByRegionId) key += `${regionId}:${owner};`;
@@ -692,9 +663,9 @@ const WorldMap = ({ isGlobe = false }) => {
     return () => {
       cancelled = true;
     };
-    // ownershipKey stands in for ownerByRegionId's contents.
+    // computedOwnershipKey stands in for ownerByRegionId's contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customActive, customRegionData, ownershipKey]);
+  }, [customActive, customRegionData, computedOwnershipKey]);
 
 
   // GADM regions on custom maps paint the STOCK vector tiles (sharp geometry at
