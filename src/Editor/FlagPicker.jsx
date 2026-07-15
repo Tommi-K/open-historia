@@ -20,6 +20,7 @@ import {
   openFlagPublishForm,
 } from "../runtime/communityFlags.js";
 import { FLAG_ACCEPT, fileToFlagDataUrl } from "./flagImage.js";
+import { listFlags, saveFlag, deleteFlag } from "../runtime/flagLibrary.js";
 
 const overlay = {
   position: "fixed",
@@ -100,7 +101,7 @@ const closeBtn = {
 
 // One flag. 3:2 like a real flag; `contain` not `cover` so a flag is never cropped
 // (a cropped flag is often a different country's).
-const FlagCard = ({ title, subtitle, imageUrl, active, onClick, onPublish }) => (
+const FlagCard = ({ title, subtitle, imageUrl, active, onClick, onPublish, onDelete }) => (
   <div
     style={{
       ...cardSurface,
@@ -132,6 +133,20 @@ const FlagCard = ({ title, subtitle, imageUrl, active, onClick, onPublish }) => 
         ✓ In use
       </div>
     )}
+    {onDelete && (
+      <button
+        type="button"
+        title="Remove from My flags"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        style={{
+          position: "absolute", right: 6, bottom: 6, background: "rgba(0,0,0,0.6)",
+          border: "none", borderRadius: 6, color: "#fff", cursor: "pointer", fontSize: "0.7rem",
+          lineHeight: 1, padding: "0.2rem 0.35rem",
+        }}
+      >
+        ✕
+      </button>
+    )}
     {onPublish && (
       <button
         type="button"
@@ -160,6 +175,9 @@ const FlagPicker = ({ open, onClose, ownerCode, currentFlag, mapFlags = {}, auth
   const [communityError, setCommunityError] = useState("");
   const [communityLoaded, setCommunityLoaded] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  // "My flags": saved to the library, so an upload is reusable on every map —
+  // the same promise "Your basemaps" makes.
+  const [mine, setMine] = useState([]);
 
   const builtIn = useMemo(() => listBuiltInFlags(), []);
   // Flags already placed on this map — the fastest way to reuse one across countries.
@@ -181,6 +199,13 @@ const FlagPicker = ({ open, onClose, ownerCode, currentFlag, mapFlags = {}, auth
     }
   };
 
+  const refreshMine = () => { listFlags().then(setMine); };
+
+  useEffect(() => {
+    if (open) refreshMine();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   useEffect(() => {
     if (open && tab === "community" && !communityLoaded) loadCommunity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,7 +225,21 @@ const FlagPicker = ({ open, onClose, ownerCode, currentFlag, mapFlags = {}, auth
     if (!file) return;
     setError("");
     try {
-      pick(await fileToFlagDataUrl(file));
+      const dataUrl = await fileToFlagDataUrl(file);
+      // Save first, apply second: a failed save must not silently lose the flag the
+      // map-maker just picked, and saving is what makes it reusable later.
+      try {
+        await saveFlag({
+          name: file.name?.replace(/\.[^.]+$/, "") || ownerCode || "Flag",
+          code: ownerCode || "",
+          author,
+          dataUrl,
+        });
+        refreshMine();
+      } catch (e) {
+        console.warn("[editor] could not save flag to the library:", e);
+      }
+      pick(dataUrl);
     } catch (e) {
       setError(e?.message || "Could not read that image.");
     }
@@ -276,6 +315,28 @@ const FlagPicker = ({ open, onClose, ownerCode, currentFlag, mapFlags = {}, auth
                         onPublish={() => openFlagPublishForm({ name: `${f.code} flag`, author, code: f.code })}
                       />
                     ))}
+                  </div>
+                </>
+              )}
+
+              {mine.length > 0 && (
+                <>
+                  <div style={rowTitle}>My flags</div>
+                  <div style={{ ...grid, marginBottom: "1rem" }}>
+                    {mine
+                      .filter((f) => !q || `${f.name} ${f.code}`.toLowerCase().includes(q))
+                      .map((f) => (
+                        <FlagCard
+                          key={f.id}
+                          title={f.name}
+                          subtitle={f.code || "saved"}
+                          imageUrl={f.dataUrl}
+                          active={currentFlag === f.dataUrl}
+                          onClick={() => pick(f.dataUrl)}
+                          onPublish={() => openFlagPublishForm({ name: f.name, author: f.author || author, code: f.code || "" })}
+                          onDelete={async () => { await deleteFlag(f.id).catch(() => {}); refreshMine(); }}
+                        />
+                      ))}
                   </div>
                 </>
               )}
