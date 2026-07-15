@@ -542,7 +542,12 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             value={settings.openaiCompatibleEndpoint ?? ""}
             onChange={(value) => onSettingChange("openaiCompatibleEndpoint", value)}
             placeholder="http://localhost:11434/v1"
-            helperText="Base URL that exposes /chat/completions and /models."
+            // A server on the player's own machine works from the website too, but only
+            // if it allows this origin — otherwise the browser silently drops the reply.
+            // Say so up front here rather than letting it surface as "Failed to fetch".
+            helperText={import.meta.env.VITE_OH_WEB
+                ? "Base URL that exposes /chat/completions and /models. A server on your own machine (Ollama, LM Studio) also has to allow this site: start Ollama with OLLAMA_ORIGINS set to this site's address, or use the desktop app."
+                : "Base URL that exposes /chat/completions and /models."}
             />
             <SettingsInput
             label="API Key (optional)"
