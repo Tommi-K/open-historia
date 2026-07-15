@@ -135,32 +135,38 @@ const ringCentroidLngLat = (ring) => {
   return [x / s, y / s];
 };
 
-const CLUSTER_JOIN_DEGREES = 28; // centroids closer than this merge into one label cluster
-const MIN_CLUSTER_AREA = 6; // in lng/lat degrees^2 — skips tiny extra islands
+const MIN_LABEL_AREA = 6; // in lng/lat degrees^2 — skips tiny exclaves
 
-// Merge same-owner clusters until stable — the greedy pass alone under-merges
-// long landmass chains (Siberia), which printed the same name a dozen times.
-const mergeOwnerClusters = (clusters, joinDeg) => {
-  let merged = true;
-  while (merged) {
-    merged = false;
-    outer: for (let i = 0; i < clusters.length; i += 1) {
-      for (let j = i + 1; j < clusters.length; j += 1) {
-        const a = clusters[i];
-        const b = clusters[j];
-        if (Math.hypot(a.cx - b.cx, a.cy - b.cy) <= joinDeg) {
-          const total = a.area + b.area;
-          a.cx = (a.cx * a.area + b.cx * b.area) / total;
-          a.cy = (a.cy * a.area + b.cy * b.area) / total;
-          a.area = total;
-          clusters.splice(j, 1);
-          merged = true;
-          break outer;
-        }
-      }
-    }
+// ---- Contiguity helpers for per-landmass labeling --------------------------
+// GADM regions are topologically consistent: adjacent regions share exact
+// boundary vertices.  We detect contiguity by matching rounded vertex coords
+// and group same-owner regions into connected components — one label per
+// contiguous landmass, even across vast distances (e.g. Russia's span).
+
+const ringBbox = (ring) => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of ring) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
   }
-  return clusters;
+  return [minX, minY, maxX, maxY];
+};
+
+const bboxesOverlap = (a, b) =>
+  a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+
+// ~1m precision at the equator — enough to match shared GADM vertices.
+const vkey = (xy) => `${Math.round(xy[0] * 1e5)},${Math.round(xy[1] * 1e5)}`;
+
+const ringsShareVertex = (ringA, ringB) => {
+  const verts = new Set();
+  for (let i = 0; i < ringA.length; i++) verts.add(vkey(ringA[i]));
+  for (let i = 0; i < ringB.length; i++) {
+    if (verts.has(vkey(ringB[i]))) return true;
+  }
+  return false;
 };
 
 // GADM assigns disputed / undetermined boundary areas the codes Z01-Z09 (the
@@ -174,7 +180,7 @@ const DISPUTED_TERRITORY_CLAIMANT = {
 };
 
 const buildOwnerLabelCollection = (regionsFC, overrides, polityOverrides, nameResolver) => {
-  const perOwner = new Map(); // owner -> [{c:[lng,lat], area}]
+  const perOwner = new Map(); // owner -> [{ring, area, centroid}]
   const countryNameByCode = new Map(); // gid0 -> modern country name (fallback labels)
 
   for (const feature of regionsFC?.features ?? []) {
@@ -186,38 +192,63 @@ const buildOwnerLabelCollection = (regionsFC, overrides, polityOverrides, nameRe
     if (!owner) continue;
     const best = largestRingOf(feature.geometry);
     if (!best || best.area <= 0) continue;
-    const entry = { c: ringCentroidLngLat(best.ring), area: best.area };
+    const centroid = ringCentroidLngLat(best.ring);
     if (!perOwner.has(owner)) perOwner.set(owner, []);
-    perOwner.get(owner).push(entry);
+    perOwner.get(owner).push({ ring: best.ring, area: best.area, centroid });
   }
 
   const features = [];
   let id = 0;
   for (const [owner, entries] of perOwner) {
-    // Greedy proximity clustering, biggest regions first so clusters seed sensibly.
-    entries.sort((a, b) => b.area - a.area);
-    const clusters = [];
-    for (const entry of entries) {
-      let best = null;
-      let bestDist = Infinity;
-      for (const cluster of clusters) {
-        const d = Math.hypot(entry.c[0] - cluster.cx, entry.c[1] - cluster.cy);
-        if (d < bestDist) {
-          bestDist = d;
-          best = cluster;
+    // Build contiguity graph: edges between regions sharing a boundary vertex.
+    const n = entries.length;
+    const adj = Array.from({ length: n }, () => []);
+    const bboxes = entries.map((e) => ringBbox(e.ring));
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (bboxesOverlap(bboxes[i], bboxes[j]) && ringsShareVertex(entries[i].ring, entries[j].ring)) {
+          adj[i].push(j);
+          adj[j].push(i);
         }
-      }
-      if (best && bestDist <= CLUSTER_JOIN_DEGREES) {
-        const total = best.area + entry.area;
-        best.cx = (best.cx * best.area + entry.c[0] * entry.area) / total;
-        best.cy = (best.cy * best.area + entry.c[1] * entry.area) / total;
-        best.area = total;
-      } else {
-        clusters.push({ cx: entry.c[0], cy: entry.c[1], area: entry.area });
       }
     }
 
-    mergeOwnerClusters(clusters, CLUSTER_JOIN_DEGREES);
+    // Connected components = contiguous landmasses of this owner.
+    const visited = new Array(n).fill(false);
+    const components = [];
+    for (let i = 0; i < n; i++) {
+      if (visited[i]) continue;
+      const comp = [];
+      const stack = [i];
+      visited[i] = true;
+      while (stack.length) {
+        const idx = stack.pop();
+        comp.push(idx);
+        for (const nb of adj[idx]) {
+          if (!visited[nb]) {
+            visited[nb] = true;
+            stack.push(nb);
+          }
+        }
+      }
+      components.push(comp);
+    }
+
+    // Area-weighted centroid per component.
+    const clusters = components
+      .map((comp) => {
+        let cx = 0, cy = 0, total = 0;
+        for (const idx of comp) {
+          const e = entries[idx];
+          cx += e.centroid[0] * e.area;
+          cy += e.centroid[1] * e.area;
+          total += e.area;
+        }
+        return total > 0 ? { cx: cx / total, cy: cy / total, area: total } : null;
+      })
+      .filter(Boolean);
+
     clusters.sort((a, b) => b.area - a.area);
     const rawName = DISPUTED_TERRITORY_CLAIMANT[owner]
       ? `Disputed (${DISPUTED_TERRITORY_CLAIMANT[owner]})`
@@ -225,9 +256,9 @@ const buildOwnerLabelCollection = (regionsFC, overrides, polityOverrides, nameRe
     const name = String(nameResolver ? nameResolver(rawName, owner) : rawName).toUpperCase();
     for (let index = 0; index < clusters.length; index += 1) {
       const cluster = clusters[index];
-      // Every owner keeps its largest cluster (tiny states still get a label);
-      // additional clusters must clear the size bar.
-      if (index > 0 && cluster.area < MIN_CLUSTER_AREA) continue;
+      // Every owner keeps its largest landmass (tiny states still get a label);
+      // additional landmasses must clear the size bar (e.g. Kaliningrad).
+      if (index > 0 && cluster.area < MIN_LABEL_AREA) continue;
       features.push({
         type: "Feature",
         id: `owner-label-${id++}`,
