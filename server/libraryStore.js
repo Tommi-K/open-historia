@@ -316,6 +316,28 @@ const readJsonFile = (targetPath, fallback = null) => {
 const writeJsonFile = (targetPath, value) => {
   ensureDirectory(path.dirname(targetPath));
   fs.writeFileSync(targetPath, JSON.stringify(value, null, 2), "utf-8");
+  // Any write can change what the catalogs describe, so drop them. This is the
+  // one choke point every meta and manifest write goes through — including
+  // create and delete, which rewrite the manifest — so hooking it here is what
+  // makes the cache safe without touching 43 call sites individually.
+  invalidateCatalogs();
+};
+
+// ---- Catalog cache ---------------------------------------------------------
+// getGameCatalog/getScenarioCatalog walk EVERY game and scenario directory and
+// parse each meta file. Nothing needs that per request, but everything paid for
+// it: resolving one runtime asset (the 5s poll for world.json) cost 139 sync
+// file ops and ~43ms of blocked event loop, just to learn which game is active.
+//
+// Cache both, and drop BOTH on any write. Coarse on purpose: writes are rare and
+// a rebuild is cheap, while a stale catalog is a bug that surfaces as "my save
+// vanished". Correctness first — the win is in the reads.
+let gameCatalogCache = null;
+let scenarioCatalogCache = null;
+
+const invalidateCatalogs = () => {
+  gameCatalogCache = null;
+  scenarioCatalogCache = null;
 };
 
 const normalizeId = (rawValue, prefix) => {
@@ -695,6 +717,19 @@ const syncBuiltInScenarioSeedDate = () => {
     return;
   }
 
+  // Already at the target: the backfill has nothing to do. Without this the
+  // write below re-arms its own guard forever — it sets gameDate and startDate
+  // to the SAME value, and shouldBackfillSeedDatePair treats
+  // `currentGameDate === currentStartDate` as "needs backfilling". So every
+  // caller rewrote an identical game.json, and since ensure* runs on the read
+  // path, each 5s poll wrote this file 4 times. Idle, forever, onto the disk.
+  if (
+    currentGameDate === BUILT_IN_SCENARIO_DEFAULT_DATE &&
+    currentStartDate === BUILT_IN_SCENARIO_DEFAULT_DATE
+  ) {
+    return;
+  }
+
   writeJsonFile(targetPath, {
     ...cloneJson(currentGame),
                 gameDate: BUILT_IN_SCENARIO_DEFAULT_DATE,
@@ -866,13 +901,25 @@ const ensureDefaultScenario = () => {
   syncBuiltInScenarioSeedDate();
 
   const manifest = getScenarioManifest();
+  let changed = false;
   if (!manifest.order.includes(DEFAULT_SCENARIO_ID)) {
     manifest.order.unshift(DEFAULT_SCENARIO_ID);
+    changed = true;
   }
   if (!manifest.selectedScenarioId) {
     manifest.selectedScenarioId = DEFAULT_SCENARIO_ID;
+    changed = true;
   }
-  saveScenarioManifest(manifest);
+  // Save when a guard above changed something, OR on a true first run when no
+  // manifest file exists yet. That second case is not optional: getScenarioManifest
+  // synthesizes a default that ALREADY lists the built-in scenario, so both guards
+  // are no-ops on first run and `changed` stays false — the old unconditional save
+  // was what committed that default to disk. Dropping it silently shipped an empty
+  // library on a fresh install (caught only by testing a fresh install).
+  //
+  // Otherwise skip: ensure* runs on the read path, so an unconditional save had
+  // every 5s poll rewriting an unchanged manifest 4 times, forever.
+  if (changed || !fs.existsSync(SCENARIO_MANIFEST_PATH)) saveScenarioManifest(manifest);
 };
 
 const ensureScenarioStore = () => {
@@ -969,6 +1016,11 @@ const getScenarioUsageCountMap = () => {
 };
 
 const getScenarioCatalog = () => {
+  if (!scenarioCatalogCache) scenarioCatalogCache = buildScenarioCatalog();
+  return scenarioCatalogCache;
+};
+
+const buildScenarioCatalog = () => {
   ensureScenarioStore();
   const usageCounts = getScenarioUsageCountMap();
   const manifest = getScenarioManifest();
@@ -1022,6 +1074,11 @@ const getScenarioCatalog = () => {
 };
 
 const getGameCatalog = () => {
+  if (!gameCatalogCache) gameCatalogCache = buildGameCatalog();
+  return gameCatalogCache;
+};
+
+const buildGameCatalog = () => {
   ensureGameStore();
   const scenarioCatalog = getScenarioCatalog();
   const scenarioLookup = new Map(scenarioCatalog.scenarios.map((scenario) => [scenario.id, scenario]));
