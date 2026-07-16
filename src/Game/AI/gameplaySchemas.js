@@ -6,6 +6,7 @@ const textSchema = (description) => ({
 const nonEmptyTextSchema = (description) => ({
   ...textSchema(description),
   minLength: 1,
+  pattern: "\\S",
 });
 
 const stringArraySchema = (description) => ({
@@ -83,12 +84,12 @@ const createdChatSchema = {
 
 const regionTransferSchema = {
   type: "object",
-  description: "A transfer of one map region to a new polity owner.",
+  description: "A transfer of exactly one map region to a new polity owner. Use exact identifiers from the authoritative region ownership reference.",
   properties: {
-    regionId: textSchema("Exact map region identifier."),
+    regionId: nonEmptyTextSchema("Exact map region identifier copied from the prompt's authoritative region ownership reference."),
     regionName: textSchema("Human-readable region name, when known."),
     fromCode: textSchema("Previous owner polity code, when known."),
-    toCode: textSchema("New owner polity code."),
+    toCode: nonEmptyTextSchema("Exact new owner polity code."),
     note: textSchema("Brief reason for the transfer."),
   },
   required: ["regionId", "toCode"],
@@ -139,7 +140,7 @@ const unitSchema = {
       minimum: -90,
       maximum: 90,
     },
-    regionId: textSchema("Map region identifier, when known."),
+    regionId: nonEmptyTextSchema("Exact map region identifier. Required for ground units."),
     status: {
       type: "string",
       description: "Optional unit status.",
@@ -170,7 +171,7 @@ const unitOpSchema = {
         unitId: nonEmptyTextSchema("Existing unit identifier."),
         toLng: { type: "number", minimum: -180, maximum: 180 },
         toLat: { type: "number", minimum: -90, maximum: 90 },
-        regionId: textSchema("Destination region identifier, when known."),
+        regionId: nonEmptyTextSchema("Exact destination region identifier. Required when moving a ground unit."),
         note: textSchema("Brief explanation of the operation."),
       },
       required: ["op", "unitId", "toLng", "toLat"],
@@ -217,7 +218,7 @@ const impactsSchema = {
     },
     regionTransfers: {
       type: "array",
-      description: "Map ownership changes.",
+      description: "Map ownership changes, with one entry per transferred region. Prose and unit operations do not change ownership.",
       items: regionTransferSchema,
     },
     unitOps: {
@@ -607,6 +608,10 @@ const validateAgainstSchema = (schema, value, path) => {
 
   if (schema.type === "string" && Number.isFinite(schema.minLength) && value.length < schema.minLength) {
     return `${path} must contain at least ${schema.minLength} character${schema.minLength === 1 ? "" : "s"}.`;
+  }
+
+  if (schema.type === "string" && schema.pattern && !new RegExp(schema.pattern).test(value)) {
+    return `${path} must contain a non-whitespace character.`;
   }
 
   if (schema.type === "array") {

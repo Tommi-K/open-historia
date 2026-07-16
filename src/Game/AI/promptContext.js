@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { loadRegionCatalog } from "../../runtime/assets.js";
+import { getActiveRegionCatalog } from "./regionOwnershipValidation.js";
 import {
   buildActionDisplayText,
   normalizeActionEntry,
@@ -219,6 +220,155 @@ export const buildPlayerPolityRegionsText = async (bundle, regionCatalog = null)
   return names.length > 0 ? names.join(", ") : "No explicit player region override list is currently recorded.";
 };
 
+const buildRegionReferenceFocusText = (bundle, gameMasterRequest = "") => {
+  const actionText = normalizeActions(bundle.actions)
+    .slice(-24)
+    .flatMap((action) => [action.title, action.text, action.rawInput, ...action.participants]);
+  const eventText = normalizeEvents(bundle.events)
+    .slice(-24)
+    .flatMap((event) => [
+      event.title,
+      event.description,
+      ...event.impacts.regionTransfers.flatMap((transfer) => [
+        transfer.regionId,
+        transfer.regionName,
+        transfer.fromCode,
+        transfer.toCode,
+      ]),
+    ]);
+  const unitText = normalizeArray(bundle.world?.units)
+    .flatMap((unit) => [unit.name, unit.ownerCode, unit.regionId]);
+
+  return [gameMasterRequest, bundle.game?.country, ...actionText, ...eventText, ...unitText]
+    .map(normalizeString)
+    .filter(Boolean)
+    .join("\n");
+};
+
+export const buildRegionOwnershipReference = (world, regionCatalog = [], {
+  focusText = "",
+  maxCharacters = 8000,
+  maxRegions = 180,
+  playerCode = "",
+} = {}) => {
+  const normalizedWorld = normalizeWorldState(world);
+  const overrides = normalizedWorld.regionOwnershipOverrides;
+  const seenRegionIds = new Set();
+  const catalog = normalizeArray(regionCatalog);
+  // A custom scenario may contain a mixture of author-drawn regions and a
+  // selected subset of stock GADM regions. Once the active geometry has been
+  // identified, stock regions absent from it are not part of this map and must
+  // never be presented to the model as valid transfer targets.
+  const visibleCatalog = getActiveRegionCatalog(normalizedWorld, catalog);
+  const visibleRegionIds = new Set(visibleCatalog.map((region) => normalizeString(region?.id)).filter(Boolean));
+  const entries = [];
+
+  const addRegion = ({ country = "", countryCode = "", id, name, ownerCode }) => {
+    const regionId = normalizeString(id);
+    if (!regionId || seenRegionIds.has(regionId)) return;
+
+    entries.push({
+      country: normalizeString(country),
+      countryCode: normalizeString(countryCode),
+      id: regionId,
+      name: normalizeString(name) || regionId,
+      ownerCode: normalizeString(ownerCode) || "UNCLAIMED",
+    });
+    seenRegionIds.add(regionId);
+  };
+
+  for (const region of visibleCatalog) {
+    const regionId = normalizeString(region?.id);
+    if (!regionId) continue;
+    const hasOverride = Object.prototype.hasOwnProperty.call(overrides, regionId);
+    addRegion({
+      country: region?.country,
+      countryCode: region?.countryCode,
+      id: regionId,
+      name: region?.name,
+      ownerCode: hasOverride
+        ? overrides[regionId]
+        : region?.ownerCode ?? region?.countryCode,
+    });
+  }
+
+  for (const [regionId, ownerCode] of Object.entries(overrides)) {
+    if (visibleRegionIds.size > 0 && !visibleRegionIds.has(regionId)) continue;
+    addRegion({ id: regionId, name: regionId, ownerCode });
+  }
+
+  if (entries.length === 0) {
+    return "Authoritative region ownership reference: no exact region identifiers are available.";
+  }
+
+  const normalizedFocus = normalizeString(focusText).toLocaleLowerCase();
+  const focusWords = new Set(normalizedFocus.toLocaleUpperCase().match(/[A-Z0-9][A-Z0-9_-]+/g) ?? []);
+  const player = normalizeString(playerCode).toLocaleUpperCase();
+  const unitRegionIds = new Set(
+    normalizeArray(normalizedWorld.units).map((unit) => normalizeString(unit?.regionId)).filter(Boolean),
+  );
+  const focusCodes = new Set(player ? [player] : []);
+  for (const unit of normalizeArray(normalizedWorld.units)) {
+    const ownerCode = normalizeString(unit?.ownerCode).toLocaleUpperCase();
+    if (ownerCode) focusCodes.add(ownerCode);
+  }
+  for (const [code, polity] of Object.entries(normalizedWorld.polityOverrides)) {
+    const names = [code, polity?.code, polity?.name, ...normalizeArray(polity?.aliases)]
+      .map((value) => normalizeString(value).toLocaleLowerCase())
+      .filter(Boolean);
+    if (names.some((name) => normalizedFocus.includes(name))) focusCodes.add(normalizeString(code).toLocaleUpperCase());
+  }
+
+  const scoredEntries = entries.map((entry) => {
+    const ownerCode = entry.ownerCode.toLocaleUpperCase();
+    const countryCode = entry.countryCode.toLocaleUpperCase();
+    let score = 0;
+    if (unitRegionIds.has(entry.id)) score += 1000;
+    if (normalizedFocus.includes(entry.id.toLocaleLowerCase())) score += 900;
+    if (entry.name.length >= 3 && normalizedFocus.includes(entry.name.toLocaleLowerCase())) score += 700;
+    if (entry.country.length >= 3 && normalizedFocus.includes(entry.country.toLocaleLowerCase())) score += 500;
+    if (focusWords.has(ownerCode) || focusWords.has(countryCode)) score += 400;
+    if (focusCodes.has(ownerCode) || focusCodes.has(countryCode)) score += 300;
+    if (player && ownerCode === player) score += 200;
+    return { ...entry, score };
+  }).sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
+
+  const safeRegionLimit = Math.max(1, Math.min(500, Math.trunc(Number(maxRegions)) || 180));
+  const safeCharacterLimit = Math.max(1000, Math.trunc(Number(maxCharacters)) || 8000);
+  let selected = scoredEntries.slice(0, safeRegionLimit);
+  const renderReference = (regions) => {
+    const regionsByOwner = new Map();
+    for (const region of regions) {
+      const ownerRegions = regionsByOwner.get(region.ownerCode) ?? [];
+      ownerRegions.push(region);
+      regionsByOwner.set(region.ownerCode, ownerRegions);
+    }
+    const ownershipLines = [...regionsByOwner.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([ownerCode, ownerRegions]) => {
+        const ownerEntries = ownerRegions
+          .sort((left, right) => left.id.localeCompare(right.id))
+          .map((region) => `${region.id}=${region.name}`)
+          .join("; ");
+        return `- ${ownerCode}: ${ownerEntries}`;
+      });
+
+    return [
+      `Authoritative region ownership reference for this turn (showing ${regions.length} of ${entries.length} visible regions; current owner code: exact-region-id=display name):`,
+      "Use only exact region ids listed below. If a required region is not listed, leave its ownership unchanged instead of guessing.",
+      ...ownershipLines,
+    ].join("\n");
+  };
+
+  let reference = renderReference(selected);
+  while (reference.length > safeCharacterLimit && selected.length > 1) {
+    selected = selected.slice(0, -1);
+    reference = renderReference(selected);
+  }
+
+  return reference;
+};
+
 export const buildWorldSummary = async (bundle, regionCatalog = null) => {
   const world = normalizeWorldState(bundle.world);
   const regions = regionCatalog ?? await loadRegions();
@@ -228,7 +378,7 @@ export const buildWorldSummary = async (bundle, regionCatalog = null) => {
     ? "No territorial overrides from the base scenario are currently recorded."
     : territoryEntries.slice(0, 24).map(([regionId, ownerCode]) => {
       const region = regionLookup.get(regionId);
-      return `- ${region?.name || regionId}${region?.country ? ` (${region.country})` : ""} -> ${ownerCode}`;
+      return `- ${region?.name || regionId} [${regionId}]${region?.country ? ` (${region.country})` : ""} -> ${ownerCode}`;
     }).join("\n");
   const polities = Object.values(world.polityOverrides);
   const politySummary = polities.length === 0
@@ -271,6 +421,7 @@ export const buildPromptContext = async (bundle, {
   eventLimit = 10,
   eventsToConsolidate = "",
   gameMasterRequest = "",
+  includeRegionOwnershipReference = false,
   longEventLimit = 24,
   respondingPolityName = "",
   targetDate = "",
@@ -329,6 +480,12 @@ export const buildPromptContext = async (bundle, {
     recentEventsLong: campaignHistory,
     recentRoundsWithDates: buildRecentRoundsWithDates(bundle),
     respondingPolityName: respondingPolityName || currentChat?.countries.find((country) => country.name !== bundle.game.country)?.name || "",
+    regionOwnershipReference: includeRegionOwnershipReference
+      ? buildRegionOwnershipReference(bundle.world, regionCatalog, {
+          focusText: buildRegionReferenceFocusText(bundle, gameMasterRequest),
+          playerCode: bundle.game.country,
+        })
+      : "",
     round: String(bundle.game.round || 1),
     simulationRules: normalizeString(bundle.world.simulationRules) || "No extra simulation rules were provided.",
     startDate: bundle.game.startDate || "",

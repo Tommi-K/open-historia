@@ -872,6 +872,7 @@ export const loadRegionCatalog = async ({ force = false } = {}) => {
             country,
             countryCode,
             id: key,
+            inCustomGeometry: false,
             name: String(name),
           });
         }
@@ -893,13 +894,17 @@ export const loadRegionCatalog = async ({ force = false } = {}) => {
         for (const feature of custom?.features ?? []) {
           const props = feature?.properties ?? {};
           const id = props.id != null ? String(props.id) : "";
-          if (!id || seen.has(id)) continue;
+          if (!id) continue;
           const countryCode = props.gid0 ? String(props.gid0) : "";
+          const ownerCode = props.owner != null ? String(props.owner) : countryCode;
+          const existing = seen.get(id);
           seen.set(id, {
-            country: props.country ? String(props.country) : "",
-            countryCode,
+            country: props.country ? String(props.country) : existing?.country ?? "",
+            countryCode: countryCode || existing?.countryCode || "",
             id,
-            name: props.name ? String(props.name) : id,
+            inCustomGeometry: true,
+            name: props.name ? String(props.name) : existing?.name ?? id,
+            ownerCode,
           });
         }
       } catch {

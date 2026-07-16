@@ -2,6 +2,7 @@
 import { callAI } from "./main.jsx";
 import { normalizePromptPack } from "./gameplayPrompts.js";
 import { getGameplayTool, validateGameplayPayload } from "./gameplaySchemas.js";
+import { getActiveRegionCatalog, validateRegionTransfers } from "./regionOwnershipValidation.js";
 import {
   buildActionHistoryText,
   buildChatSummaryText,
@@ -96,6 +97,7 @@ const cloneValue = (value) => {
 
 const normalizeString = (value) => String(value ?? "").trim();
 const normalizeArray = (value) => (Array.isArray(value) ? value : []);
+const GROUND_UNIT_TYPES = new Set(["infantry", "armor", "artillery", "garrison"]);
 
 const parseIsoDate = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizeString(value));
@@ -632,10 +634,33 @@ const buildGeneratedChat = async (chatLike, linkEventId, world) => {
 };
 
 const validateGeneratedWorldChanges = async (candidate, world) => {
+  const [countryCatalog, regionCatalog] = await Promise.all([
+    loadCountryNames().catch(() => []),
+    loadRegionCatalog().catch(() => []),
+  ]);
+  const regionTransferError = validateRegionTransfers({
+    candidate,
+    countryCatalog,
+    regionCatalog,
+    world,
+  });
+  if (regionTransferError) return regionTransferError;
+
   const containers = Array.isArray(candidate?.events)
     ? candidate.events.map((event, index) => ({ impacts: event?.impacts, path: `$.events[${index}].impacts` }))
     : [{ impacts: candidate?.impacts, path: "$.impacts" }];
-  const unitIds = new Set(normalizeWorldState(world).units.map((unit) => normalizeString(unit.id)).filter(Boolean));
+  const normalizedWorld = normalizeWorldState(world);
+  const unitById = new Map(
+    normalizedWorld.units
+      .map((unit) => [normalizeString(unit.id), unit])
+      .filter(([unitId]) => unitId),
+  );
+  const unitIds = new Set(unitById.keys());
+  const activeRegionIds = new Set(
+    getActiveRegionCatalog(normalizedWorld, regionCatalog)
+      .map((region) => normalizeString(region?.id))
+      .filter(Boolean),
+  );
   const generatedPolities = [];
 
   for (const { impacts, path } of containers) {
@@ -654,16 +679,41 @@ const validateGeneratedWorldChanges = async (candidate, world) => {
         if (!normalizeString(operation.unit?.name) || !normalizeString(operation.unit?.ownerCode)) {
           return `${operationPath}.unit must have nonblank name and ownerCode values.`;
         }
+        const unitType = normalizeString(operation.unit?.type).toLowerCase();
+        const regionId = normalizeString(operation.unit?.regionId);
+        if (GROUND_UNIT_TYPES.has(unitType) && !regionId) {
+          return `${operationPath}.unit.regionId is required for a ground unit.`;
+        }
+        if (regionId && activeRegionIds.size > 0 && !activeRegionIds.has(regionId)) {
+          return `${operationPath}.unit.regionId "${regionId}" is not on the active map.`;
+        }
         const spawnedId = normalizeString(operation.unit?.id);
         if (spawnedId && unitIds.has(spawnedId)) return `${operationPath}.unit.id duplicates an existing unit.`;
-        if (spawnedId) unitIds.add(spawnedId);
+        if (spawnedId) {
+          unitIds.add(spawnedId);
+          unitById.set(spawnedId, operation.unit);
+        }
         continue;
       }
 
       const unitId = normalizeString(operation.unitId);
       if (!unitId) return `${operationPath}.unitId must not be blank.`;
       if (!unitIds.has(unitId)) return `${operationPath}.unitId does not identify an existing unit.`;
-      if (operation.op === "remove" || (operation.op === "strength" && operation.strength === 0)) unitIds.delete(unitId);
+      if (operation.op === "move") {
+        const unit = unitById.get(unitId);
+        const regionId = normalizeString(operation.regionId);
+        if (GROUND_UNIT_TYPES.has(normalizeString(unit?.type).toLowerCase()) && !regionId) {
+          return `${operationPath}.regionId is required when moving a ground unit.`;
+        }
+        if (regionId && activeRegionIds.size > 0 && !activeRegionIds.has(regionId)) {
+          return `${operationPath}.regionId "${regionId}" is not on the active map.`;
+        }
+        unitById.set(unitId, { ...unit, regionId });
+      }
+      if (operation.op === "remove" || (operation.op === "strength" && operation.strength === 0)) {
+        unitIds.delete(unitId);
+        unitById.delete(unitId);
+      }
     }
   }
 
@@ -1377,7 +1427,10 @@ export const simulateTimelineJump = async ({ days, mode = "jump", signal } = {})
   if (dateStep >= 1 && parseIsoDate(originDate) && targetDate === originDate) {
     throw new Error("The requested jump exceeds the supported date range.");
   }
-  const variables = await buildTemplateVariables(bundle, { targetDate });
+  const variables = await buildTemplateVariables(bundle, {
+    includeRegionOwnershipReference: true,
+    targetDate,
+  });
   const durationLabel = formatDurationLabel(safeDays);
   let [minEvents, maxEvents] = eventCountRangeForDays(safeDays);
   // Guarantee at least one event per queued action, so each planned action has a
@@ -1439,7 +1492,10 @@ export const simulateAutoJump = async ({ days = 365, signal } = {}) =>
 export const applyGameMasterCommand = async (requestText) => {
   const bundle = await readGameStateBundle({ force: true });
   const baseColors = await readJson(JSON_URLS.colors, { defaultValue: {}, force: true });
-  const variables = await buildTemplateVariables(bundle, { gameMasterRequest: requestText });
+  const variables = await buildTemplateVariables(bundle, {
+    gameMasterRequest: requestText,
+    includeRegionOwnershipReference: true,
+  });
   const { generation, payload } = await runJsonTask("gameMaster", {
     fallback: () => ({
       impacts: {

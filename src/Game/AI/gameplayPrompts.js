@@ -1,12 +1,53 @@
 /*! Open Historia — portions (troop & era prompt additions) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
-import DEFAULT_PROMPTS from "./defaultPrompts.json";
+import DEFAULT_PROMPTS from "./defaultPrompts.json" with { type: "json" };
 const normalizeString = (value) => String(value ?? "").trim();
+
+const REGION_OWNERSHIP_TASK_KEYS = new Set(["jumpForward", "autoJumpForward", "gameMaster"]);
+const REGION_OWNERSHIP_HEADING = "[Region Ownership Changes]";
+const REGION_OWNERSHIP_REFERENCE = "${regionOwnershipReference}";
+
+export const REGION_OWNERSHIP_GUIDANCE = `[Region Ownership Changes]
+Region ownership changes ONLY through impacts.regionTransfers. Narrative prose, polityChanges, and unitOps do not move a border by themselves.
+- For every captured, annexed, ceded, purchased, liberated, or otherwise transferred region, add one transfer object per region to the same event: {"regionId":"AAA.1_1","regionName":"Example Region","fromCode":"AAA","toCode":"BBB","note":"Why control changed"}.
+- regionId must be the exact region id copied from the authoritative region ownership reference in the map context. Use exact polity codes for fromCode and toCode. Do not invent an id, use a display name as an id, use a country code as a wildcard, or omit a region because the event prose mentions it.
+- A country-wide annexation requires a separate regionTransfers entry for every region that changes hands. regionName and note are descriptive only; regionId and toCode perform the ownership change.
+- When a ground force decisively defeats or expels the defenders and holds hostile land, emit both the matching unitOps and regionTransfers entry. Air or naval units alone cannot hold land. Do not transfer territory after a failed attack, a raid, mere transit, or while hostile ground forces still contest it.
+
+\${regionOwnershipReference}`;
+
+export const addRegionOwnershipGuidance = (taskKey, prompt) => {
+  const normalized = normalizeString(prompt);
+  if (!REGION_OWNERSHIP_TASK_KEYS.has(taskKey)) {
+    return normalized;
+  }
+
+  const hasHeading = normalized.includes(REGION_OWNERSHIP_HEADING);
+  const hasReference = normalized.includes(REGION_OWNERSHIP_REFERENCE);
+  if (hasHeading && hasReference) return normalized;
+
+  const guidance = hasHeading
+    ? REGION_OWNERSHIP_REFERENCE
+    : hasReference
+      ? REGION_OWNERSHIP_GUIDANCE.replace(`\n\n${REGION_OWNERSHIP_REFERENCE}`, "")
+      : REGION_OWNERSHIP_GUIDANCE;
+
+  const outputMarker = "\n--- OUTPUT FORMAT";
+  const markerIndex = normalized.lastIndexOf(outputMarker);
+  if (markerIndex < 0) return `${normalized}\n\n${guidance}`;
+
+  return `${normalized.slice(0, markerIndex)}\n\n${guidance}${normalized.slice(markerIndex)}`;
+};
 
 const PROMPT_ADVISOR_DEFAULT = DEFAULT_PROMPTS.advisor;
 
 const PROMPT_LEADER_DEFAULT = DEFAULT_PROMPTS.leader;
 
-const PROMPT_TASK_DEFAULTS = DEFAULT_PROMPTS.tasks;
+const PROMPT_TASK_DEFAULTS = Object.fromEntries(
+  Object.entries(DEFAULT_PROMPTS.tasks).map(([key, prompt]) => [
+    key,
+    addRegionOwnershipGuidance(key, prompt),
+  ]),
+);
 
 export const GAMEPLAY_PROMPT_DEFAULTS = PROMPT_TASK_DEFAULTS;
 
@@ -230,10 +271,10 @@ export const normalizePromptPack = (rawPrompts) => {
     ),
     leader: normalizeString(prompts.leader) || PROMPT_LEADER_DEFAULT,
     tasks: Object.fromEntries(
-      PROMPT_TASK_KEYS.map((key) => [
-        key,
-        normalizeString(prompts[key] ?? tasks[key]) || PROMPT_TASK_DEFAULTS[key],
-      ]),
+      PROMPT_TASK_KEYS.map((key) => {
+        const prompt = normalizeString(prompts[key] ?? tasks[key]) || PROMPT_TASK_DEFAULTS[key];
+        return [key, addRegionOwnershipGuidance(key, prompt)];
+      }),
     ),
   };
 };
