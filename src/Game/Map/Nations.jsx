@@ -10,6 +10,7 @@ import {
   moveUnitTo,
   attackWith,
 } from "./unitsController.js";
+import { resolveRegionTarget, selectRegionFeature } from "./regionCapture.js";
 import {
   JSON_URLS,
   PMTILES_PROTOCOL_URLS,
@@ -389,6 +390,14 @@ const WorldMap = ({ isGlobe = false }) => {
       customRegionData.features.some((feature) => !/\./.test(String(feature?.properties?.id ?? ""))),
     [customActive, customRegionData],
   );
+  const customStockRegionIds = useMemo(
+    () => new Set(
+      (customRegionData?.features ?? [])
+        .map((feature) => String(feature?.properties?.id ?? ""))
+        .filter((id) => id.includes(".")),
+    ),
+    [customRegionData],
+  );
   // Re-read on each render so a runtime token change (switching games/scenarios)
   // refetches the geometry, mirroring the live-URL world poll below.
   const regionsGeojsonUrl = JSON_URLS.regionsGeojson;
@@ -446,22 +455,69 @@ const WorldMap = ({ isGlobe = false }) => {
         ? map.queryRenderedFeatures(event.point, { layers: ["units-fill"] })
         : [];
 
+    const regionAt = () => {
+      // Custom (editor) regions render on top of the stock regions. On a map with
+      // its own geometry, querying the stock layer would turn fantasy oceans into
+      // whichever modern country happens to sit under the same coordinates.
+      const queryLayers = ["custom-regions-fill", "custom-regions-fill-far", "regions-fill"]
+        .filter((id) => map.getLayer(id));
+      const feature = selectRegionFeature({
+        customStockRegionIds,
+        features: map.queryRenderedFeatures(event.point, { layers: queryLayers }),
+        hasDrawnGeometry,
+      });
+      if (!feature) return null;
+
+      const region = resolveRegionTarget({
+        ownerLookup: ownerLookupRef.current,
+        ownershipOverrides: worldState.regionOwnershipOverrides ?? {},
+        properties: feature.properties ?? {},
+      });
+      return region ? { feature, region } : null;
+    };
+
     const mode = getInteractionMode();
 
     // Active troop command modes intercept the click as a target, not a selection.
     if (mode.kind === "deploy") {
-      deployUnit({ ...mode.params, lng: event.lngLat.lng, lat: event.lngLat.lat });
+      deployUnit({
+        ...mode.params,
+        lng: event.lngLat.lng,
+        lat: event.lngLat.lat,
+        region: regionAt()?.region ?? null,
+      });
       clearInteractionMode();
       return;
     }
     if (mode.kind === "move") {
-      moveUnitTo(mode.unitId, event.lngLat.lng, event.lngLat.lat);
+      const targetUnits = unitsAt();
+      const targetRegion = regionAt()?.region ?? null;
+      moveUnitTo(
+        mode.unitId,
+        event.lngLat.lng,
+        event.lngLat.lat,
+        targetRegion
+          ? {
+              ...targetRegion,
+              defendingUnitIds: targetUnits.map((unit) => String(unit.properties?.id ?? "")).filter(Boolean),
+            }
+          : null,
+      );
       clearInteractionMode();
       return;
     }
     if (mode.kind === "attack") {
       const target = unitsAt();
-      if (target.length) attackWith(mode.unitId, target[0].properties.id);
+      if (target.length) {
+        const region = regionAt()?.region ?? null;
+        const targetRegion = region
+          ? {
+              ...region,
+              defendingUnitIds: target.map((unit) => String(unit.properties?.id ?? "")).filter(Boolean),
+            }
+          : null;
+        attackWith(mode.unitId, target[0].properties.id, targetRegion);
+      }
       clearInteractionMode();
       return;
     }
@@ -475,27 +531,15 @@ const WorldMap = ({ isGlobe = false }) => {
     }
 
     dismissUnitPopup();
-    // Custom (editor) regions render on top of the stock regions. On a map with its
-    // OWN drawn/generated geometry, query only the custom layers — a click on empty
-    // sea must resolve to nothing, not the leftover Earth country underneath. On a
-    // re-ownership map (stock GADM geometry), keep querying regions-fill: it IS the
-    // map, and its high-zoom hit-testing has no custom-layer equivalent.
-    const queryLayers = (hasDrawnGeometry
-      ? ["custom-regions-fill", "custom-regions-fill-far"]
-      : ["custom-regions-fill", "regions-fill"]
-    ).filter((id) => map.getLayer(id));
-    const features = map.queryRenderedFeatures(event.point, { layers: queryLayers });
-    if (!features.length) return;
+    const regionHit = regionAt();
+    if (!regionHit) return;
 
-    const props = features[0].properties ?? {};
-    const regionId = props.GID_1 ?? props.id ?? "";
-    // On custom maps, stock-tile hits carry modern props only — resolve the era
-    // owner (possibly "" = unclaimed) from the ownership lookup.
-    const owner = props.owner ?? (ownerLookupRef.current.size ? ownerLookupRef.current.get(regionId) : undefined);
+    const props = regionHit.feature.properties ?? {};
+    const { id: regionId, name: regionName, ownerCode: owner } = regionHit.region;
     onRegionSelected({
       COUNTRY: props.COUNTRY ?? props.country ?? "",
-      NAME_1: props.NAME_1 ?? props.name ?? "",
-      GID_0: owner || (owner === "" ? "" : props.GID_0 ?? props.gid0 ?? ""),
+      NAME_1: regionName,
+      GID_0: owner,
       GID_1: regionId,
       // gid0 = the region's underlying real country (flag fallback when the owner
       // is a custom polity like "HRE"). owner "" flags an unclaimed region.
@@ -503,7 +547,7 @@ const WorldMap = ({ isGlobe = false }) => {
       owner,
       lngLat: event.lngLat,
     });
-  }, [hasDrawnGeometry, map]);
+  }, [customStockRegionIds, hasDrawnGeometry, map, worldState.regionOwnershipOverrides]);
 
   useEffect(() => {
     if (!map) return;
