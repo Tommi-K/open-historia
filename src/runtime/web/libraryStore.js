@@ -39,8 +39,8 @@ const putGame = (record) => idbPut(STORES.games, record);
 const listScenarioIds = async () => new Set((await idbGetAll(STORES.scenarios)).map((r) => r.id));
 const listGameIds = async () => new Set((await idbGetAll(STORES.games)).map((r) => r.id));
 
-const emptyScenarioRecord = (id) => ({ id, meta: {}, json: {}, colors: undefined, geojson: {}, pmtiles: {}, cover: undefined });
-const emptyGameRecord = (id) => ({ id, meta: {}, json: {}, colors: undefined, snapshots: undefined, cover: undefined });
+const emptyScenarioRecord = (id) => ({ id, meta: {}, json: {}, colors: undefined, flags: undefined, geojson: {}, pmtiles: {}, cover: undefined });
+const emptyGameRecord = (id) => ({ id, meta: {}, json: {}, colors: undefined, flags: undefined, snapshots: undefined, cover: undefined });
 
 const jsonAsset = (record, key) => (record?.json?.[key] !== undefined ? record.json[key] : cloneJson(JSON_ASSET_DEFAULTS[key] ?? {}));
 
@@ -119,6 +119,7 @@ const trimmed = (value) => String(value ?? "").trim();
 const scenarioAssetPresent = (record, key) => {
   if (key === COVER_IMAGE_ASSET_KEY) return Boolean(record.cover);
   if (key === "colors") return record.colors !== undefined;
+  if (key === "flags") return record.flags !== undefined;
   if (PMTILES_ASSET_KEYS.includes(key)) return record.pmtiles?.[key] !== undefined;
   if (SCENARIO_GEOJSON_ASSET_KEYS.includes(key)) return record.geojson?.[key] !== undefined;
   return false;
@@ -298,6 +299,31 @@ const getActiveRuntimeScenarioRecord = async () => {
   return (await getScenario(scenarioId)) ?? (await getScenario(DEFAULT_SCENARIO_ID));
 };
 
+// The default scenario's political geometry (regions.geojson, ~12 MB) is too big
+// to bundle in the web seed, so fetch it once from the content origin (the Worker
+// proxy → GitHub Release) and cache it for the session. Without it the default
+// scenario (customRegions: true) renders no colored countries and no labels.
+const CONTENT_BASE = (import.meta.env.VITE_OH_PMTILES_URL || "/assets").replace(/\/$/, "");
+let defaultRegionsGeojsonPromise = null;
+const fetchDefaultRegionsGeojson = () => {
+  if (!defaultRegionsGeojsonPromise) {
+    defaultRegionsGeojsonPromise = fetch(`${CONTENT_BASE}/default-regions.geojson`, { cache: "force-cache" })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null)
+      .then((data) => {
+        // Never pin an empty/failed result for the whole session — a transient
+        // miss during the heavy first load would otherwise blank the political
+        // map until reload. Clear the cache so the next read retries.
+        if (!data || !Array.isArray(data.features) || data.features.length === 0) {
+          defaultRegionsGeojsonPromise = null;
+          return null;
+        }
+        return data;
+      });
+  }
+  return defaultRegionsGeojsonPromise;
+};
+
 // --- Runtime JSON read/write (mirror readRuntimeJsonAsset/writeRuntimeJsonAsset) ---
 const readRuntimeJsonAsset = async (assetKey) => {
   if (SCENARIO_GEOJSON_ASSET_KEYS.includes(assetKey)) {
@@ -305,6 +331,11 @@ const readRuntimeJsonAsset = async (assetKey) => {
     let value = scenario?.geojson?.[assetKey];
     if (value === undefined && assetKey === "regionsGeojson" && scenario && scenario.id !== DEFAULT_SCENARIO_ID) {
       value = (await getScenario(DEFAULT_SCENARIO_ID))?.geojson?.[assetKey];
+    }
+    // Web build: the default scenario's regions.geojson isn't in the seed (too
+    // big), so pull it from the content origin — otherwise its political map is blank.
+    if ((value === undefined || value === null) && assetKey === "regionsGeojson" && scenario && scenario.id === DEFAULT_SCENARIO_ID) {
+      value = await fetchDefaultRegionsGeojson();
     }
     // geojson may be a raw uploaded string; parse-with-fallback like readJsonFile.
     return parseJsonValue(value, cloneJson(EMPTY_FEATURE_COLLECTION));
@@ -318,17 +349,22 @@ const readRuntimeJsonAsset = async (assetKey) => {
   const scenarioValue = scenario ? runtimeValueFromRecord(scenario, assetKey, /*scenarioScope*/ true) : undefined;
   if (scenarioValue !== undefined) return normalizeRuntimeWorld(assetKey, coerceRuntimeValue(assetKey, scenarioValue));
 
-  if (OPTIONAL_JSON_ASSET_KEYS.includes(assetKey)) {
+  if (assetKey === "colors") {
     // Server falls back to the immutable app palette (public/assets/colors.json),
-    // NOT the mutable default-scenario colors.
+    // NOT the mutable default-scenario colors. Keyed on "colors" specifically, not
+    // on OPTIONAL_JSON_ASSET_KEYS: that list has more than one member now, and
+    // handing the colour palette to a scenario that just has no flags.json would
+    // put [102,95,86] in an <img src>. Mirrors server/libraryStore.js:1853-1868.
     return cloneJson(FALLBACK_COLORS ?? {});
   }
+  if (OPTIONAL_JSON_ASSET_KEYS.includes(assetKey)) return {};
   return cloneJson(JSON_ASSET_DEFAULTS[assetKey] ?? {});
 };
 
 // The stored value for a runtime key on a record, or undefined if "no file".
 const runtimeValueFromRecord = (record, assetKey, scenarioScope = false) => {
   if (assetKey === "colors") return record.colors;
+  if (assetKey === "flags") return record.flags;
   if (assetKey === "snapshots") return scenarioScope ? undefined : record.snapshots; // snapshots are game-only
   if (JSON_ASSET_KEYS.includes(assetKey)) return record.json?.[assetKey];
   return undefined;
@@ -336,7 +372,8 @@ const runtimeValueFromRecord = (record, assetKey, scenarioScope = false) => {
 
 // colors may be stored as raw uploaded text; parse it on read (the 7 core json
 // assets and snapshots are always structured, so they pass through).
-const coerceRuntimeValue = (assetKey, value) => (assetKey === "colors" ? parseJsonValue(value, {}) : value);
+const coerceRuntimeValue = (assetKey, value) =>
+  (assetKey === "colors" || assetKey === "flags" ? parseJsonValue(value, {}) : value);
 
 const writeRuntimeJsonAsset = async (assetKey, value) => {
   if (!JSON_ASSET_KEYS.includes(assetKey) && !OPTIONAL_JSON_ASSET_KEYS.includes(assetKey) && !RUNTIME_ONLY_JSON_ASSET_KEYS.includes(assetKey)) {
@@ -356,6 +393,10 @@ const writeRuntimeJsonAsset = async (assetKey, value) => {
   else if (assetKey === "colors") canonical = canonicalizeColorKeys(value, activeGame.json?.world ?? null);
 
   if (assetKey === "colors") activeGame.colors = canonical;
+  // Flags are keyed by owner code like colors, but are NOT canonicalized:
+  // canonicalizeColorKeys resolves names->codes, and a flag key is always the
+  // code the editor painted with.
+  else if (assetKey === "flags") activeGame.flags = canonical;
   else if (assetKey === "snapshots") activeGame.snapshots = canonical;
   else activeGame.json = { ...activeGame.json, [assetKey]: canonical };
   writeGameMeta(activeGame, {});
@@ -763,6 +804,7 @@ export const handleScenarios = async ({ method, segments, body, rawBody, content
   try {
     if (!id) {
       if (method === "POST") return jsonResponse(await createScenario(body ?? {}), 201);
+      if (method === "GET") return jsonResponse(await getScenarioCatalog());
       return null;
     }
     // /api/scenarios/selected|active
@@ -793,7 +835,11 @@ export const handleScenarios = async ({ method, segments, body, rawBody, content
 export const handleGames = async ({ method, segments, body, rawBody, contentType, rangeHeader }) => {
   const id = segments[0] ? decodeURIComponent(segments[0]) : null;
   try {
-    if (!id) { if (method === "POST") return jsonResponse(await createGame(body ?? {}), 201); return null; }
+    if (!id) {
+      if (method === "POST") return jsonResponse(await createGame(body ?? {}), 201);
+      if (method === "GET") return jsonResponse(await getGameCatalog());
+      return null;
+    }
     if (id === "active" && method === "PUT") return jsonResponse(await setActiveGame(body?.gameId));
 
     const sub = segments[1];
