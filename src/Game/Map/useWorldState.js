@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { JSON_URLS, readJson } from "../../runtime/assets.js";
 
 // Singleton: all consumers share one poll interval and one set of results,
@@ -31,8 +31,21 @@ const stopPolling = () => {
   }
 };
 
+const areEqualShallow = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    if (a[keysA[i]] !== b[keysA[i]]) return false;
+  }
+  return true;
+};
+
 export function useWorldState() {
   const [state, setState] = useState(() => sharedState || {});
+  const prevRef = useRef(null);
 
   useEffect(() => {
     startPolling();
@@ -45,7 +58,7 @@ export function useWorldState() {
     };
   }, []);
 
-  return {
+  const derived = {
     worldState: state,
     worldKnown: Boolean(state && Object.keys(state).length > 0),
     customRegions: Boolean(state?.customRegions),
@@ -55,4 +68,21 @@ export function useWorldState() {
     regionOwnershipOverrides: state?.regionOwnershipOverrides ?? {},
     polityOverrides: state?.polityOverrides ?? {},
   };
+
+  const prev = prevRef.current;
+  if (
+    prev &&
+    prev.worldKnown === derived.worldKnown &&
+    prev.customRegions === derived.customRegions &&
+    prev.customCities === derived.customCities &&
+    prev.basemap === derived.basemap &&
+    prev.background === derived.background &&
+    areEqualShallow(prev.regionOwnershipOverrides, derived.regionOwnershipOverrides) &&
+    areEqualShallow(prev.polityOverrides, derived.polityOverrides)
+  ) {
+    return prev;
+  }
+
+  prevRef.current = derived;
+  return derived;
 }

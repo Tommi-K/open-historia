@@ -77,6 +77,9 @@ const fallbackColorFromCode = (code = "") => {
 
 // Neutral tone for unowned custom regions (land with no owner code).
 const NEUTRAL_LAND_COLOR = "rgb(88, 98, 110)";
+// Constant GL expression — the colour data is baked into each feature's
+// _fillColor property by enrichedCustomRegionData above.
+const CUSTOM_FILL_COLOR = ["get", "_fillColor"];
 
 // GADM region ids contain a dot ("DEU.2_1"); author-drawn regions ("reg_...")
 // don't. On custom maps, GADM regions crossfade between two sources: the seed
@@ -346,15 +349,6 @@ const computeOwnerBorderCollection = async (regionsFC, ownerById, isCancelled) =
   return { type: "FeatureCollection", features };
 };
 
-// Procedural fallback keyed on the custom region's own "owner" property (the
-// custom-geometry twin of buildFallbackColorExpression, which reads GID_0).
-const buildOwnerFallbackColorExpression = () => ([
-  "rgb",
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 0, 1], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 2, 3], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 1, 2], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-]);
-
 const WorldMap = ({ isGlobe = false }) => {
   const { current: map } = useMap();
   const [colorMap, setColorMap] = useState({});
@@ -590,35 +584,45 @@ const WorldMap = ({ isGlobe = false }) => {
     };
   }, [colorMap, regionOwnershipOverrides]);
 
-  // Fill for custom (editor) regions: a live ownership override wins, else the
-  // region's own owner color, else a neutral unowned tone. Keyed on the region's
-  // "id"/"owner" properties and recomputed as ownership polls in.
-  const customFillStyle = useMemo(() => {
-    const ownerStops = Object.entries(colorMap).flatMap(([iso, rgb]) => [
-      iso, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
-    ]);
-    const ownerFallback = buildOwnerFallbackColorExpression();
-    const ownerMatch = ownerStops.length > 0
-      ? ["match", ["get", "owner"], ...ownerStops, ownerFallback]
-      : ownerFallback;
-    const baseColor = [
-      "case",
-      ["==", ["coalesce", ["get", "owner"], ""], ""], NEUTRAL_LAND_COLOR,
-      ownerMatch,
-    ];
-    const overrideStops = Object.entries(regionOwnershipOverrides).flatMap(([regionId, ownerCode]) => [
-      regionId,
-      colorMap[ownerCode]
+  // Fill for custom (editor) regions: we pre-compute a _fillColor property onto
+  // every feature so the MapLibre paint expression is just ["get", "_fillColor"]
+  // — a constant GL expression that never needs recompilation. Ownership-override
+  // colours, owner-based colours, and the neutral fallback are all computed in
+  // fast JS and baked into the GeoJSON data itself.
+  const enrichedCustomRegionData = useMemo(() => {
+    if (!customRegionData?.features) return customRegionData;
+
+    const colorByOwner = {};
+    for (const [iso, rgb] of Object.entries(colorMap)) {
+      colorByOwner[iso] = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+    }
+
+    const overrideColor = {};
+    for (const [regionId, ownerCode] of Object.entries(regionOwnershipOverrides)) {
+      overrideColor[regionId] = colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
-        : fallbackColorFromCode(ownerCode),
-    ]);
+        : fallbackColorFromCode(ownerCode);
+    }
+
     return {
-      "fill-color": overrideStops.length > 0
-        ? ["match", ["get", "id"], ...overrideStops, baseColor]
-        : baseColor,
-      "fill-opacity": 0.72,
+      ...customRegionData,
+      features: customRegionData.features.map((f) => {
+        const props = f.properties || {};
+        const id = props.id;
+        let fillColor;
+        if (overrideColor[id]) {
+          fillColor = overrideColor[id];
+        } else if (props.owner && colorByOwner[props.owner]) {
+          fillColor = colorByOwner[props.owner];
+        } else if (props.owner) {
+          fillColor = fallbackColorFromCode(props.owner);
+        } else {
+          fillColor = NEUTRAL_LAND_COLOR;
+        }
+        return { ...f, properties: { ...props, _fillColor: fillColor } };
+      }),
     };
-  }, [colorMap, regionOwnershipOverrides]);
+  }, [customRegionData, colorMap, regionOwnershipOverrides]);
 
   // Region id -> current owner (live overrides win). Drives the stock-tile fill,
   // and the click handler uses it to resolve era owner/unclaimed for the popup.
@@ -793,7 +797,7 @@ const WorldMap = ({ isGlobe = false }) => {
           and each region simplifies independently — shared borders drift
           apart at low zoom. Full resolution keeps them connected everywhere;
           the seed geometry is coarse enough that this stays cheap. */}
-      <Source id="custom-regions-source" type="geojson" data={customRegionData} tolerance={0}>
+      <Source id="custom-regions-source" type="geojson" data={enrichedCustomRegionData} tolerance={0}>
         {/* Zoomed-out fill for GADM regions from the seed geometry — the stock
             tiles are too simplified at low zoom and show sliver gaps there. */}
         <Layer
@@ -801,7 +805,7 @@ const WorldMap = ({ isGlobe = false }) => {
           type="fill"
           maxzoom={7}
           filter={GADM_GEOMETRY_FILTER}
-          paint={{ "fill-color": customFillStyle["fill-color"], "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
+          paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
         />
         {/* Far hairlines from the SAME seed geometry as the far fills, so
             zoomed-out region borders sit exactly on the colored areas. They
@@ -823,7 +827,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="custom-regions-fill"
           type="fill"
           filter={CUSTOM_GEOMETRY_FILTER}
-          paint={customFillStyle}
+          paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": 0.72 }}
         />
         <Layer
           id="custom-regions-outline"
