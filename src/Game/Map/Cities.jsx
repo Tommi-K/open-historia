@@ -7,6 +7,7 @@ import {
     ensurePmtilesProtocol,
     readJson,
 } from "../../runtime/assets.js";
+import { useWorldState } from "./useWorldState.js";
 
 ensurePmtilesProtocol();
 
@@ -175,28 +176,11 @@ const CustomCities = ({ data }) => (
 
 const Cities = () => {
     // world.customCities marks scenarios whose maps carry their own era-accurate
-    // city set (presets, editor maps). Polled like the world state in Nations so
-    // switching games/scenarios swaps the city layer within a few seconds.
-    const [customFlag, setCustomFlag] = useState(false);
+    // city set (presets, editor maps). Consumed from the shared world-state hook
+    // so the map doesn't fire its own independent 5s poll.
+    const { customCities: customFlag } = useWorldState();
     const [customData, setCustomData] = useState(null);
     const citiesGeojsonUrl = JSON_URLS.citiesGeojson;
-
-    useEffect(() => {
-        let cancelled = false;
-        const loadFlag = () => {
-            readJson(JSON_URLS.world, { defaultValue: {}, force: true })
-                .then((data) => {
-                    if (!cancelled) setCustomFlag(Boolean(data?.customCities));
-                })
-                .catch(() => {});
-        };
-        loadFlag();
-        const interval = setInterval(loadFlag, 5000);
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, []);
 
     // The city set itself is static per scenario — fetched once when the flag (or
     // the runtime token behind the URL) changes.

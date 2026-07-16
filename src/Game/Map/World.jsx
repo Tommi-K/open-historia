@@ -1,5 +1,5 @@
 /*! Open Historia — portions (troop system integration + globe sun/stars) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). */
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import Map from "react-map-gl/maplibre";
 import Nations from "./Nations";
 import { useCustomBackground } from "./useCustomBackground.js";
@@ -169,6 +169,8 @@ const buildWorldStyle = (basemapId, customBg, backgroundDeclared, isGlobe) => {
 
 function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
   const hasReportedInitialIdleRef = useRef(false);
+  const [loading, setLoading] = useState(false);
+  const loadTimerRef = useRef(null);
   const viewStateRef = useRef({
     longitude: 0,
     latitude: 0,
@@ -207,7 +209,13 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
     if (hasReportedInitialIdleRef.current) return;
     hasReportedInitialIdleRef.current = true;
     onInitialIdle?.();
+    setLoading(false);
   }, [onInitialIdle]);
+  const handleLoading = useCallback(() => {
+    setLoading(true);
+    clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = setTimeout(() => setLoading(false), 8000);
+  }, []);
 
   return (
     // Stars and the single projected sun sit behind the transparent MapLibre
@@ -273,11 +281,13 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
         dragPan
         fadeDuration={0}
         collectResourceTiming={false}
+        crossSourceCollisions={false}
         renderWorldCopies
         projection={mapProjection}
         terrain={terrain}
         mapStyle={worldStyle}
         onIdle={handleIdle}
+        onLoading={handleLoading}
         onMove={handleMove}
       >
         <Nations isGlobe={isGlobe} />
@@ -301,6 +311,25 @@ function World({ mapRef, projection, terrainEnabled, onInitialIdle }) {
             pointerEvents: "none",
           }}
         />
+      )}
+      {loading && (
+        <div style={{
+          position: "absolute",
+          bottom: 20,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 5,
+          background: "rgba(0,0,0,0.6)",
+          color: "#aab",
+          padding: "6px 14px",
+          borderRadius: 20,
+          fontSize: 13,
+          pointerEvents: "none",
+          transition: "opacity 0.3s",
+          backdropFilter: "blur(4px)",
+        }}>
+          Loading tiles…
+        </div>
       )}
     </div>
   );

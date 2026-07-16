@@ -463,7 +463,10 @@ export const readJson = async (url, { defaultValue, force = false, signal } = {}
     return cloneJson(jsonValueCache.get(url));
   }
 
-  if (!force && jsonRequestCache.has(url)) {
+  // Even with force: true, batch concurrent requests to the same URL so
+  // multiple independent 5s pollers (Nations, Cities, background, units)
+  // don't each fire their own network fetch.
+  if (jsonRequestCache.has(url)) {
     return cloneJson(await jsonRequestCache.get(url));
   }
 

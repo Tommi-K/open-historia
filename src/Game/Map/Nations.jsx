@@ -21,6 +21,7 @@ import {
 import { loadCountryLabelCollections } from "../../runtime/countryLabels.js";
 import { translateLabel } from "../../runtime/translator.js";
 import { MAP_SETTING_KEYS, useMapSetting } from "../../runtime/mapSettings.js";
+import { useWorldState } from "./useWorldState.js";
 import polygonClipping from "polygon-clipping";
 
 ensurePmtilesProtocol();
@@ -76,6 +77,9 @@ const fallbackColorFromCode = (code = "") => {
 
 // Neutral tone for unowned custom regions (land with no owner code).
 const NEUTRAL_LAND_COLOR = "rgb(88, 98, 110)";
+// Constant GL expression — the colour data is baked into each feature's
+// _fillColor property by enrichedCustomRegionData above.
+const CUSTOM_FILL_COLOR = ["get", "_fillColor"];
 
 // GADM region ids contain a dot ("DEU.2_1"); author-drawn regions ("reg_...")
 // don't. On custom maps, GADM regions crossfade between two sources: the seed
@@ -345,37 +349,24 @@ const computeOwnerBorderCollection = async (regionsFC, ownerById, isCancelled) =
   return { type: "FeatureCollection", features };
 };
 
-// Procedural fallback keyed on the custom region's own "owner" property (the
-// custom-geometry twin of buildFallbackColorExpression, which reads GID_0).
-const buildOwnerFallbackColorExpression = () => ([
-  "rgb",
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 0, 1], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 2, 3], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-  ["+", 64, ["*", ["index-of", ["slice", ["coalesce", ["get", "owner"], "ZZZ"], 1, 2], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
-]);
-
 const WorldMap = ({ isGlobe = false }) => {
   const { current: map } = useMap();
   const [colorMap, setColorMap] = useState({});
-  const [worldState, setWorldState] = useState({ regionOwnershipOverrides: {} });
+  const {
+    worldState,
+    worldKnown,
+    customRegions: customFlag,
+    regionOwnershipOverrides,
+    polityOverrides,
+  } = useWorldState();
   const mapDisplaySettings = {
     hideCountryLabels: useMapSetting(MAP_SETTING_KEYS.hideCountryLabels),
   };
-  // False until the first world.json read: before that we can't know whether
-  // this game uses the stock map or a custom one, so NO political layer
-  // renders — this kills the "modern world flashes, then the real map loads"
-  // effect every scenario used to show.
-  const [worldKnown, setWorldKnown] = useState(false);
   const [pointLabelData, setPointLabelData] = useState(EMPTY_FEATURE_COLLECTION);
   const [curvedLabelData, setCurvedLabelData] = useState(EMPTY_FEATURE_COLLECTION);
   const [customRegionData, setCustomRegionData] = useState(EMPTY_FEATURE_COLLECTION);
   const countriesUrl = PMTILES_PROTOCOL_URLS.countries;
   const regionsUrl = PMTILES_PROTOCOL_URLS.regions;
-  // A map authored in the editor sets world.customRegions; that flag triggers the
-  // geometry fetch. We only actually suppress the stock rendering once the custom
-  // geometry has loaded, so a missing/empty payload falls back to the base map
-  // instead of showing a blank world.
-  const customFlag = Boolean(worldState?.customRegions);
   const customActive = customFlag && Array.isArray(customRegionData?.features) && customRegionData.features.length > 0;
   // True for maps with their OWN drawn/generated geometry (region ids like
   // "reg_fmg_…", no dot) rather than re-ownership on the stock GADM tiles (ids like
@@ -420,13 +411,13 @@ const WorldMap = ({ isGlobe = false }) => {
     if (!customActive) return EMPTY_FEATURE_COLLECTION;
     return buildOwnerLabelCollection(
       customRegionData,
-      worldState?.regionOwnershipOverrides ?? {},
-      worldState?.polityOverrides ?? {},
+      regionOwnershipOverrides,
+      polityOverrides,
       (raw, owner) => translateLabel(resolveCountryDisplayName(raw, owner)),
     );
     // labelEpoch: rebuild once new translations land.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customActive, customRegionData, worldState, labelEpoch]);
+  }, [customActive, customRegionData, regionOwnershipOverrides, polityOverrides, labelEpoch]);
 
   // On custom maps the stock modern-country labels are replaced wholesale by the
   // owner labels (no more "Russia"/"Ukraine" floating over the Soviet Union).
@@ -517,31 +508,6 @@ const WorldMap = ({ isGlobe = false }) => {
       .catch((error) => console.error("Error loading colors:", error));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadWorldState = () => {
-      readJson(JSON_URLS.world, { defaultValue: {}, force: true })
-        .then((data) => {
-          if (!cancelled) {
-            setWorldState(data ?? {});
-            // Only now do we KNOW whether this world is stock or custom —
-            // nothing world-dependent renders before this (see worldKnown).
-            setWorldKnown(true);
-          }
-        })
-        .catch((error) => console.error("Error loading world state:", error));
-    };
-
-    loadWorldState();
-    const interval = setInterval(loadWorldState, 5000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
   // Load custom region geometry once, only when the active map declares it. Stock
   // scenarios never hit the network for this. Ownership recolors live via the
   // world poll above; the geometry itself is static per scenario.
@@ -596,7 +562,7 @@ const WorldMap = ({ isGlobe = false }) => {
       iso, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
     ]);
     const fallback = buildFallbackColorExpression();
-    const regionOverrideStops = Object.entries(worldState?.regionOwnershipOverrides ?? {}).flatMap(([regionId, ownerCode]) => [
+    const regionOverrideStops = Object.entries(regionOwnershipOverrides).flatMap(([regionId, ownerCode]) => [
       regionId,
       colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
@@ -616,51 +582,60 @@ const WorldMap = ({ isGlobe = false }) => {
         : fallback,
       "fill-opacity": 0.66,
     };
-  }, [colorMap, worldState]);
+  }, [colorMap, regionOwnershipOverrides]);
 
-  // Fill for custom (editor) regions: a live ownership override wins, else the
-  // region's own owner color, else a neutral unowned tone. Keyed on the region's
-  // "id"/"owner" properties and recomputed as ownership polls in.
-  const customFillStyle = useMemo(() => {
-    const ownerStops = Object.entries(colorMap).flatMap(([iso, rgb]) => [
-      iso, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
-    ]);
-    const ownerFallback = buildOwnerFallbackColorExpression();
-    const ownerMatch = ownerStops.length > 0
-      ? ["match", ["get", "owner"], ...ownerStops, ownerFallback]
-      : ownerFallback;
-    const baseColor = [
-      "case",
-      ["==", ["coalesce", ["get", "owner"], ""], ""], NEUTRAL_LAND_COLOR,
-      ownerMatch,
-    ];
-    const overrideStops = Object.entries(worldState?.regionOwnershipOverrides ?? {}).flatMap(([regionId, ownerCode]) => [
-      regionId,
-      colorMap[ownerCode]
+  // Fill for custom (editor) regions: we pre-compute a _fillColor property onto
+  // every feature so the MapLibre paint expression is just ["get", "_fillColor"]
+  // — a constant GL expression that never needs recompilation. Ownership-override
+  // colours, owner-based colours, and the neutral fallback are all computed in
+  // fast JS and baked into the GeoJSON data itself.
+  const enrichedCustomRegionData = useMemo(() => {
+    if (!customRegionData?.features) return customRegionData;
+
+    const colorByOwner = {};
+    for (const [iso, rgb] of Object.entries(colorMap)) {
+      colorByOwner[iso] = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+    }
+
+    const overrideColor = {};
+    for (const [regionId, ownerCode] of Object.entries(regionOwnershipOverrides)) {
+      overrideColor[regionId] = colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
-        : fallbackColorFromCode(ownerCode),
-    ]);
+        : fallbackColorFromCode(ownerCode);
+    }
+
     return {
-      "fill-color": overrideStops.length > 0
-        ? ["match", ["get", "id"], ...overrideStops, baseColor]
-        : baseColor,
-      "fill-opacity": 0.72,
+      ...customRegionData,
+      features: customRegionData.features.map((f) => {
+        const props = f.properties || {};
+        const id = props.id;
+        let fillColor;
+        if (overrideColor[id]) {
+          fillColor = overrideColor[id];
+        } else if (props.owner && colorByOwner[props.owner]) {
+          fillColor = colorByOwner[props.owner];
+        } else if (props.owner) {
+          fillColor = fallbackColorFromCode(props.owner);
+        } else {
+          fillColor = NEUTRAL_LAND_COLOR;
+        }
+        return { ...f, properties: { ...props, _fillColor: fillColor } };
+      }),
     };
-  }, [colorMap, worldState]);
+  }, [customRegionData, colorMap, regionOwnershipOverrides]);
 
   // Region id -> current owner (live overrides win). Drives the stock-tile fill,
   // and the click handler uses it to resolve era owner/unclaimed for the popup.
   const ownerByRegionId = useMemo(() => {
     const lookup = new Map();
     if (!customActive) return lookup;
-    const overrides = worldState?.regionOwnershipOverrides ?? {};
     for (const feature of customRegionData?.features ?? []) {
       const props = feature.properties || {};
       if (!props.id) continue;
-      lookup.set(props.id, overrides[props.id] ?? props.owner ?? "");
+      lookup.set(props.id, regionOwnershipOverrides[props.id] ?? props.owner ?? "");
     }
     return lookup;
-  }, [customActive, customRegionData, worldState]);
+  }, [customActive, customRegionData, regionOwnershipOverrides]);
 
   const ownerLookupRef = useRef(new Map());
   useEffect(() => {
@@ -670,7 +645,7 @@ const WorldMap = ({ isGlobe = false }) => {
   // Stable fingerprint of the ownership map: the world poll rebuilds
   // ownerByRegionId every 5s, but border geometry only needs recomputing
   // when an owner actually changes.
-  const ownershipKey = useMemo(() => {
+  const computedOwnershipKey = useMemo(() => {
     if (!customActive || !countryBordersEnabled()) return "";
     let key = "";
     for (const [regionId, owner] of ownerByRegionId) key += `${regionId}:${owner};`;
@@ -692,9 +667,9 @@ const WorldMap = ({ isGlobe = false }) => {
     return () => {
       cancelled = true;
     };
-    // ownershipKey stands in for ownerByRegionId's contents.
+    // computedOwnershipKey stands in for ownerByRegionId's contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customActive, customRegionData, ownershipKey]);
+  }, [customActive, customRegionData, computedOwnershipKey]);
 
 
   // GADM regions on custom maps paint the STOCK vector tiles (sharp geometry at
@@ -822,7 +797,7 @@ const WorldMap = ({ isGlobe = false }) => {
           and each region simplifies independently — shared borders drift
           apart at low zoom. Full resolution keeps them connected everywhere;
           the seed geometry is coarse enough that this stays cheap. */}
-      <Source id="custom-regions-source" type="geojson" data={customRegionData} tolerance={0}>
+      <Source id="custom-regions-source" type="geojson" data={enrichedCustomRegionData} tolerance={0}>
         {/* Zoomed-out fill for GADM regions from the seed geometry — the stock
             tiles are too simplified at low zoom and show sliver gaps there. */}
         <Layer
@@ -830,7 +805,7 @@ const WorldMap = ({ isGlobe = false }) => {
           type="fill"
           maxzoom={7}
           filter={GADM_GEOMETRY_FILTER}
-          paint={{ "fill-color": customFillStyle["fill-color"], "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
+          paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
         />
         {/* Far hairlines from the SAME seed geometry as the far fills, so
             zoomed-out region borders sit exactly on the colored areas. They
@@ -852,7 +827,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="custom-regions-fill"
           type="fill"
           filter={CUSTOM_GEOMETRY_FILTER}
-          paint={customFillStyle}
+          paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": 0.72 }}
         />
         <Layer
           id="custom-regions-outline"
