@@ -117,6 +117,25 @@ test("moving an active player army into an undefended enemy region captures it",
   assert.equal(sourceWorld.regionOwnershipOverrides["DEF.1_1"], "DEF");
 });
 
+test("pending scenario units cannot move or capture", () => {
+  const pending = { ...attacker, id: "pending", source: "scenario", status: "pending" };
+  const world = {
+    regionOwnershipOverrides: { [combatRegion.id]: "DEF" },
+    units: [pending],
+  };
+  const result = applyUnitMovementToWorld({
+    lat: defender.lat,
+    lng: defender.lng,
+    targetRegion: combatRegion,
+    unitId: pending.id,
+    world,
+  });
+
+  assert.equal(result.capture, null);
+  assert.equal(result.world, world);
+  assert.equal(result.world.regionOwnershipOverrides[combatRegion.id], "DEF");
+});
+
 test("a surviving ground attacker captures after winning an ordinary battle", () => {
   const combat = resolveClash(attacker, defender, 1);
   assert.equal(combat.attackerWins, true);

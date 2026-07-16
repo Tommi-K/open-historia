@@ -179,7 +179,7 @@ export const deployUnit = async ({ type, strength, name, lng, lat, region = null
 
 export const moveUnitTo = async (unitId, lng, lat, targetRegion = null) => {
   const unit = getUnitById(unitId);
-  if (!unit) return { resolved: false };
+  if (!unit || unit.status === "pending") return { resolved: false };
 
   const distance = distanceKm(unit, { lng, lat });
   const leash = moveLeashKm(unit.type, gameDate);

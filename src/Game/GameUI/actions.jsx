@@ -7,9 +7,9 @@ import { useCountryDisplayName } from "../../runtime/polityNames.js";
 import { generateActionSuggestions, refinePlayerAction } from "../AI/gameplay.js";
 import {
     buildActionDisplayText,
+    mutateActionsState,
     normalizeActionEntry,
     readActionsState,
-    writeActionsState,
 } from "../../runtime/gameState.js";
 
 dayjs.extend(advancedFormat);
@@ -73,7 +73,6 @@ const SpinnerRing = ({ size = 14, tone = "rgba(255,255,255,0.88)" }) => {
     );
 };
 
-const saveActions = async (actions) => writeActionsState(actions);
 const loadActions = async () => readActionsState();
 
 const createManualAction = (input) =>
@@ -279,10 +278,10 @@ const ActionsPanel = ({ isOpen, onClose, onOpenAdvisor }) => {
         };
     }, [isOpen]);
 
-    const persistActions = async (nextActions) => {
-        setActions(nextActions);
+    const persistActions = async (mutator) => {
         try {
-            await saveActions(nextActions);
+            const saved = await mutateActionsState(mutator);
+            setActions(saved);
         } catch (error) {
             console.error("Failed to save actions:", error);
         }
@@ -312,7 +311,7 @@ const ActionsPanel = ({ isOpen, onClose, onOpenAdvisor }) => {
 
         setIsSubmitting(true);
         try {
-            await persistActions([...actions, nextAction]);
+            await persistActions((current) => [...current, nextAction]);
             setInputValue("");
         } finally {
             setIsSubmitting(false);
@@ -339,7 +338,9 @@ const ActionsPanel = ({ isOpen, onClose, onOpenAdvisor }) => {
     };
 
     const handleDelete = async (index) => {
-        await persistActions(actions.filter((_, actionIndex) => actionIndex !== index));
+        const actionId = actions[index]?.id;
+        if (!actionId) return;
+        await persistActions((current) => current.filter((action) => action.id !== actionId));
     };
 
     const handleQueueSuggestion = async (action) => {
@@ -350,7 +351,7 @@ const ActionsPanel = ({ isOpen, onClose, onOpenAdvisor }) => {
             return;
         }
 
-        await persistActions([...actions, queuedAction]);
+        await persistActions((current) => [...current, queuedAction]);
         // Visible click feedback: the suggestion button flips to "✓ Queued".
         setQueuedSuggestionIds((previous) => new Set(previous).add(action.id));
     };

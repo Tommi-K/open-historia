@@ -28,6 +28,11 @@ export const applyUnitMovementToWorld = ({
   targetRegion = null,
   timestamp = new Date().toISOString(),
 } = {}) => {
+  const movingUnit = (world.units ?? []).find((unit) => unit.id === unitId);
+  if (!movingUnit || movingUnit.status === "pending") {
+    return { capture: null, world };
+  }
+
   const nextUnits = (world.units ?? []).map((unit) =>
     unit.id === unitId
       ? {
