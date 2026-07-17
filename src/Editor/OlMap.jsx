@@ -18,6 +18,7 @@ import OSM from "ol/source/OSM";
 import XYZ from "ol/source/XYZ";
 import { editorBasemapById, esriXyzUrl } from "./basemaps.js";
 import VectorLayer from "ol/layer/Vector";
+import VectorImageLayer from "ol/layer/VectorImage";
 import VectorSource from "ol/source/Vector";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
@@ -234,8 +235,22 @@ const OlMap = ({
     const regionSource = new VectorSource({ wrapX: false });
     const getZoom = (res) => mapRef.current?.getView().getZoomForResolution(res) ?? 3;
 
-    const regionLayer = new VectorLayer({
+    // VectorImage, not Vector: the regions are ~3,662 separate filled+stroked
+    // paths, and a plain vector layer re-rasterises every one of them on every
+    // frame. That is the ~1.6s presentation delay after each interaction —
+    // processing time is ~1ms, so it is the paint, not the JS. VectorImage
+    // rasterises once and re-blits the image while panning, re-rendering only
+    // when the view leaves the buffered image or the data changes.
+    //
+    // Safe for the tools: Draw/Modify/Snap bind to the SOURCE, not the layer, so
+    // they still see full-resolution geometry. Translate and click-selection go
+    // through forEachFeatureAtPixel, which VectorImage supports.
+    //
+    // imageRatio 2 renders twice the viewport, so short pans stay inside the
+    // existing image instead of triggering a fresh rasterisation.
+    const regionLayer = new VectorImageLayer({
       source: regionSource,
+      imageRatio: 2,
       wrapX: false,
       style: makeRegionStyle({
         getTypesById: () => typesByIdRef.current,
