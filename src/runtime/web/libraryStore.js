@@ -21,6 +21,19 @@ import {
   scenarioLooksLikeRuntimeSnapshot, buildFreshGameSeedFromScenario, buildFreshWorldSeedFromScenario,
   normalizeRuntimeWorld, COUNTRY_NAME_REGISTRY,
 } from "./models.js";
+// Imported, not mirrored: server/ownerMigration.js is pure ESM with no node
+// imports, so Vite bundles it into the web build. One implementation of the
+// resolver rather than two hand-kept copies that drift.
+import {
+  buildOwnerRenameMap,
+  migrateChat,
+  migrateEvents,
+  migrateGame,
+  migrateRegions,
+  migrateWorld as migrateOwnerWorld,
+  needsMigration as needsOwnerMigration,
+  rekeyOwnerMap,
+} from "../../../server/ownerMigration.js";
 import DEFAULT_SEED from "./generated/defaultScenario.js";
 
 const SCENARIO_MANIFEST_KEY = "scenario-manifest";
@@ -324,13 +337,97 @@ const fetchDefaultRegionsGeojson = () => {
   return defaultRegionsGeojsonPromise;
 };
 
+// --- Owner schema migration (mirror of the server's ensureOwnerSchema) ---
+// Rewrites a record whose owners are GADM codes into one whose owners are country
+// names. Imports server/ownerMigration.js rather than restating it: that module is
+// pure ESM with no node imports, so Vite bundles it, and one implementation cannot
+// drift from the other the way two hand-kept copies would.
+//
+// Synchronous and in-place — a web record holds world/game/colors/geojson together,
+// so unlike the server there is nothing to keep in step across files. The caller
+// persists the record it was already going to persist.
+const migratedRecords = new Set();
+
+const ensureOwnerSchema = (record, kind) => {
+  if (!record?.id) return false;
+  // `kind` is explicit rather than read off the record: a scenario and a game may
+  // both be called "default", and one cache key for the two would migrate whichever
+  // arrived first and mark the other done.
+  const key = `${kind}:${record.id}`;
+  if (migratedRecords.has(key)) return false;
+  const world = record.json?.world;
+  if (!world || !needsOwnerMigration(world)) {
+    migratedRecords.add(key);
+    return false;
+  }
+  try {
+    // colors / flags / tags / snapshots are TOP-LEVEL on a record, not inside
+    // record.json — only JSON_ASSET_KEYS live there (see runtimeValueFromRecord).
+    const regions = parseJsonValue(record.geojson?.regionsGeojson, null);
+    const renames = buildOwnerRenameMap({
+      polityOverrides: world.polityOverrides,
+      countryNameOverrides: record.meta?.countryNameOverrides,
+      registry: COUNTRY_NAME_REGISTRY,
+      features: regions?.features,
+      ownershipOverrides: world.regionOwnershipOverrides,
+      ownerCodes: world.ownerCodes,
+      colors: record.colors,
+      flags: record.flags,
+      tags: record.tags,
+      units: world.units,
+      countryTags: world.countryTags,
+      internationalReputation: world.internationalReputation,
+      gameCountry: record.json?.game?.country,
+    });
+    const warn = (message) => console.warn(`[owner-migration] ${key}: ${message}`);
+
+    if (record.colors) record.colors = rekeyOwnerMap(record.colors, renames, "colors", warn);
+    if (record.flags) record.flags = rekeyOwnerMap(record.flags, renames, "flags", warn);
+    if (record.tags) record.tags = rekeyOwnerMap(record.tags, renames, "tags", warn);
+    if (record.json.events) record.json.events = migrateEvents(record.json.events, renames);
+    if (record.json.chat) record.json.chat = migrateChat(record.json.chat, renames);
+    if (record.json.game) record.json.game = migrateGame(record.json.game, renames);
+    if (regions) record.geojson.regionsGeojson = migrateRegions(regions, renames);
+    // Roll-back points hold a full nested copy of every owner-keyed structure and
+    // are blind-written back over live state, with no marker to catch a stale one.
+    if (record.snapshots) {
+      delete record.snapshots;
+      warn("discarded roll-back snapshots — they predate the owner rename");
+    }
+    // World last: it carries the marker, so a failure leaves the record unmarked
+    // and the next read simply redoes it.
+    record.json.world = migrateOwnerWorld(world, renames, warn);
+    migratedRecords.add(key);
+    console.log(`[owner-migration] ${key}: ${renames.size} owner(s) -> ${new Set(renames.values()).size} name(s)`);
+    return true;
+  } catch (error) {
+    console.warn(`[owner-migration] ${key} failed: ${error.message}`);
+    return false;
+  }
+};
+
 // --- Runtime JSON read/write (mirror readRuntimeJsonAsset/writeRuntimeJsonAsset) ---
 const readRuntimeJsonAsset = async (assetKey) => {
+  // Above the geojson branch: it returns before anything else runs, and it is the
+  // branch that serves the file `owner` physically lives in.
+  const activeForMigration = await getActiveGameRecord();
+  if (activeForMigration && ensureOwnerSchema(activeForMigration, "game")) {
+    await idbPut(STORES.games, activeForMigration);
+  }
   if (SCENARIO_GEOJSON_ASSET_KEYS.includes(assetKey)) {
     const scenario = await getActiveRuntimeScenarioRecord();
+    // The scenario owns its geometry; migrate it as its OWN record.
+    if (scenario && ensureOwnerSchema(scenario, "scenario")) await idbPut(STORES.scenarios, scenario);
     let value = scenario?.geojson?.[assetKey];
     if (value === undefined && assetKey === "regionsGeojson" && scenario && scenario.id !== DEFAULT_SCENARIO_ID) {
-      value = (await getScenario(DEFAULT_SCENARIO_ID))?.geojson?.[assetKey];
+      // Borrowing the Modern Day map. Migrate it as DEFAULT'S record, never this
+      // scenario's: those owners live in default's owner-space, so resolving them
+      // against this world's polities would name Russia after whatever this
+      // scenario calls that token. This scenario's own ownership is in its
+      // world.regionOwnershipOverrides, migrated with its own record above.
+      const fallback = await getScenario(DEFAULT_SCENARIO_ID);
+      if (fallback && ensureOwnerSchema(fallback, "scenario")) await idbPut(STORES.scenarios, fallback);
+      value = fallback?.geojson?.[assetKey];
     }
     // Web build: the default scenario's regions.geojson isn't in the seed (too
     // big), so pull it from the content origin — otherwise its political map is blank.
@@ -498,20 +595,39 @@ const updateScenario = async (id, body = {}) => {
   const record = await getScenario(id);
   if (!record) throw new Error(`Scenario not found: ${id}`);
   writeScenarioMeta(record, pickMetaUpdates(body));
-  applyJsonMutations(record, body, /*canonicalizeCountry*/ true);
+  applyJsonMutations(record, body, /*canonicalizeCountry*/ true, "scenario");
   await putScenario(record);
   if (body.setActive) await setSelectedScenario(id);
   return getScenarioDetails(id);
 };
 
-const applyJsonMutations = (record, body, canonicalize) => {
+const applyJsonMutations = (record, body, canonicalize, kind) => {
   record.json = record.json ?? {};
-  if (body.game !== undefined) record.json.game = canonicalize ? canonicalizeGameCountry(body.game) : body.game;
-  else if (body.gamePatch && typeof body.gamePatch === "object") record.json.game = { ...jsonAsset(record, "game"), ...body.gamePatch };
+  // Migrate before mutating: resolving a country reference against a world whose
+  // polities are still code-keyed matches none of them and quietly invents a
+  // parallel country.
+  ensureOwnerSchema(record, kind);
+  // The world these refs resolve against: the one in this same body if there is
+  // one, else what the record already holds.
+  const worldContext = () =>
+    (body.world && typeof body.world === "object" ? body.world
+      : body.worldPatch && typeof body.worldPatch === "object" ? body.worldPatch
+        : jsonAsset(record, "world"));
+  // The *Patch branches used to spread raw while their full-value twins
+  // canonicalized, so the same edit landed differently depending on which shape
+  // the client happened to send — and differently again from the desktop.
+  if (body.game !== undefined) record.json.game = canonicalize ? canonicalizeGameCountry(body.game, worldContext()) : body.game;
+  else if (body.gamePatch && typeof body.gamePatch === "object") {
+    const merged = { ...jsonAsset(record, "game"), ...body.gamePatch };
+    record.json.game = canonicalize ? canonicalizeGameCountry(merged, worldContext()) : merged;
+  }
   if (body.prompts !== undefined) record.json.prompts = body.prompts;
   else if (body.promptsPatch && typeof body.promptsPatch === "object") record.json.prompts = { ...jsonAsset(record, "prompts"), ...body.promptsPatch };
   if (body.world !== undefined) record.json.world = canonicalize ? canonicalizeWorldCountryRefs(body.world) : body.world;
-  else if (body.worldPatch && typeof body.worldPatch === "object") record.json.world = { ...jsonAsset(record, "world"), ...body.worldPatch };
+  else if (body.worldPatch && typeof body.worldPatch === "object") {
+    const merged = { ...jsonAsset(record, "world"), ...body.worldPatch };
+    record.json.world = canonicalize ? canonicalizeWorldCountryRefs(merged) : merged;
+  }
   if (body.storage && typeof body.storage === "object") {
     for (const key of STORAGE_JSON_ASSET_KEYS) if (key in body.storage) record.json[key] = body.storage[key];
   }
@@ -587,7 +703,7 @@ const updateGame = async (id, body = {}) => {
   const record = await getGame(id);
   if (!record) throw new Error(`Game not found: ${id}`);
   writeGameMeta(record, pickMetaUpdates(body));
-  applyJsonMutations(record, body, true);
+  applyJsonMutations(record, body, true, "game");
   await putGame(record);
   if (body.setActive) await setActiveGame(id);
   return getGameDetails(id);

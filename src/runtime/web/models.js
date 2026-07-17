@@ -67,33 +67,38 @@ export const DEFAULT_GAME_META = {
   subtitle: "Current campaign",
 };
 
-// --- Country canonicalization (server/libraryStore.js:40-127) ---
+// --- Country reference resolution (mirrors server/libraryStore.js) ---
+// A country is identified by its NAME ("Russia"), not its GADM code. This used to
+// run the other way — names canonicalized DOWN to a code — and inverting it is the
+// whole point: the old direction silently undid every name-keyed write at the
+// persistence boundary, and it could not be made correct anyway (NAME_TO_CODE was
+// last-write-wins over a registry where six codes share the name "India", so
+// "India" resolved to Z07, a disputed sliver of Kashmir).
+//
+// A legacy code still resolves, and so does a polity's alias, so an author writing
+// "Rome" reaches "Roman Empire" and a model still saying "RUS" lands on "Russia".
 export { COUNTRY_NAME_REGISTRY };
-const NAME_TO_CODE = new Map(
-  Object.entries(COUNTRY_NAME_REGISTRY).map(([code, name]) => [String(name).trim().toLowerCase(), code]),
-);
-const KNOWN_CODES = new Set(Object.keys(COUNTRY_NAME_REGISTRY));
 
-export const canonicalizeCountryRef = (value, world) => {
+export const resolveOwnerRef = (value, world) => {
   const raw = String(value ?? "").trim();
   if (!raw) return raw;
-  if (KNOWN_CODES.has(raw)) return raw;
 
   const lower = raw.toLowerCase();
   const overrides = world?.polityOverrides;
   if (overrides && typeof overrides === "object") {
-    if (overrides[raw]) return raw;
-    for (const [code, polity] of Object.entries(overrides)) {
-      if (!polity || typeof polity !== "object") continue;
-      if (String(polity.name ?? "").trim().toLowerCase() === lower) return polity.code || code;
-      if (Array.isArray(polity.aliases) && polity.aliases.some((alias) => String(alias).trim().toLowerCase() === lower)) {
-        return polity.code || code;
+    for (const [key, polity] of Object.entries(overrides)) {
+      const name = String(polity?.name ?? key).trim();
+      if (name.toLowerCase() === lower) return name;
+      if (polity && Array.isArray(polity.aliases)
+          && polity.aliases.some((alias) => String(alias).trim().toLowerCase() === lower)) {
+        return name;
       }
+      if (key === raw) return name;
     }
   }
 
-  const byName = NAME_TO_CODE.get(lower);
-  if (byName) return byName;
+  const known = COUNTRY_NAME_REGISTRY[raw];
+  if (known) return known;
   return raw;
 };
 
@@ -103,25 +108,38 @@ export const canonicalizeWorldCountryRefs = (world) => {
 
   if (next.regionOwnershipOverrides && typeof next.regionOwnershipOverrides === "object") {
     next.regionOwnershipOverrides = Object.fromEntries(
-      Object.entries(next.regionOwnershipOverrides).map(([regionId, owner]) => [regionId, canonicalizeCountryRef(owner, world)]),
+      Object.entries(next.regionOwnershipOverrides).map(([regionId, owner]) => [regionId, resolveOwnerRef(owner, world)]),
     );
   }
   if (Array.isArray(next.ownerCodes)) {
-    next.ownerCodes = [...new Set(next.ownerCodes.map((entry) => canonicalizeCountryRef(entry, world)))];
+    next.ownerCodes = [...new Set(next.ownerCodes.map((entry) => resolveOwnerRef(entry, world)))];
   }
   if (next.polityOverrides && typeof next.polityOverrides === "object") {
+    // Keyed by name, `.code` dropped — the key IS the identifier now.
     next.polityOverrides = Object.fromEntries(
       Object.entries(next.polityOverrides).map(([key, polity]) => {
-        const code = canonicalizeCountryRef(polity?.code || key, world);
-        return [code, polity && typeof polity === "object" ? { ...polity, code } : polity];
+        const name = resolveOwnerRef(polity?.name || key, world);
+        if (!polity || typeof polity !== "object") return [name, polity];
+        const { code, ...rest } = polity;
+        return [name, { ...rest, name }];
       }),
     );
   }
   if (Array.isArray(next.units)) {
     next.units = next.units.map((unit) =>
       unit && typeof unit === "object" && unit.ownerCode
-        ? { ...unit, ownerCode: canonicalizeCountryRef(unit.ownerCode, world) }
+        ? { ...unit, ownerCode: resolveOwnerRef(unit.ownerCode, world) }
         : unit,
+    );
+  }
+  if (next.countryTags && typeof next.countryTags === "object" && !Array.isArray(next.countryTags)) {
+    next.countryTags = Object.fromEntries(
+      Object.entries(next.countryTags).map(([key, value]) => [resolveOwnerRef(key, world), value]),
+    );
+  }
+  if (next.internationalReputation && typeof next.internationalReputation === "object" && !Array.isArray(next.internationalReputation)) {
+    next.internationalReputation = Object.fromEntries(
+      Object.entries(next.internationalReputation).map(([key, value]) => [resolveOwnerRef(key, world), value]),
     );
   }
   return next;
@@ -129,12 +147,15 @@ export const canonicalizeWorldCountryRefs = (world) => {
 
 export const canonicalizeColorKeys = (colors, world) => {
   if (!colors || typeof colors !== "object" || Array.isArray(colors)) return colors;
-  return Object.fromEntries(Object.entries(colors).map(([key, value]) => [canonicalizeCountryRef(key, world), value]));
+  return Object.fromEntries(Object.entries(colors).map(([key, value]) => [resolveOwnerRef(key, world), value]));
 };
 
-export const canonicalizeGameCountry = (game) => {
+// `world` is REQUIRED: without it a preset's game.country ("ROM") reaches neither
+// its polity nor the registry, stays a raw code while every region around it says
+// "Roman Empire", and the player owns nothing.
+export const canonicalizeGameCountry = (game, world) => {
   if (!game || typeof game !== "object" || Array.isArray(game) || !game.country) return game;
-  return { ...game, country: canonicalizeCountryRef(game.country, null) };
+  return { ...game, country: resolveOwnerRef(game.country, world) };
 };
 
 // --- Meta readers (server/libraryStore.js:451-519), applied to a stored raw meta ---
