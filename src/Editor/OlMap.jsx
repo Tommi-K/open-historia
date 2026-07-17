@@ -711,16 +711,19 @@ const OlMap = ({
       },
       // Serialize all region geometry to a GeoJSON FeatureCollection (WGS84) for
       // saving/exporting; load one back into the source.
-      serializeRegions: () => {
-        const fmt = new GeoJSON();
-        return JSON.parse(
-          fmt.writeFeatures(regionSource.getFeatures(), {
-            dataProjection: "EPSG:4326",
-            featureProjection: "EPSG:3857",
-            decimals: 5,
-          }),
-        );
-      },
+      // writeFeaturesObject, NOT JSON.parse(writeFeatures(...)). OL's writeFeatures
+      // is literally JSON.stringify(writeFeaturesObject(...)) (format/JSONFeature.js),
+      // so parsing its result built an ~83MB string at z9 and immediately tore it
+      // back apart — to reach the object writeFeaturesObject already had. And this
+      // runs on the 2s autosave, so the editor did that on a loop while you worked;
+      // saveDocument then stringifies the payload anyway, making it string -> objects
+      // -> string. That churn is what ran the tab out of memory.
+      serializeRegions: () =>
+        new GeoJSON().writeFeaturesObject(regionSource.getFeatures(), {
+          dataProjection: "EPSG:4326",
+          featureProjection: "EPSG:3857",
+          decimals: 5,
+        }),
       loadRegions: (fc) => {
         const fmt = new GeoJSON();
         regionSource.clear();
