@@ -216,11 +216,27 @@ const OlMap = ({
   };
 
   useEffect(() => {
-    const regionSource = new VectorSource();
+    // wrapX:false — the single biggest thing the editor was doing wrong.
+    //
+    // OpenLayers defaults it to true, and the canvas vector renderer then loops
+    // over world copies and redraws EVERY feature for each one
+    // (renderer/canvas/VectorLayer.js: `endWorld`, plus extendX_ adding another
+    // world on each side). So a zoomed-out world map painted all 3,662 regions
+    // two or three times per frame. It looks like broken culling — an endless
+    // horizontal band of map that never disappears — but it is the renderer
+    // deliberately repeating the world sideways. There is nothing to repeat
+    // vertically, which is why culling only ever LOOKED broken left-to-right.
+    //
+    // It is also what OL's own docs prescribe for this exact use case: "For
+    // vector editing across the -180° and 180° meridians to work properly, this
+    // should be set to false." So this is a correctness fix that happens to be
+    // the performance fix.
+    const regionSource = new VectorSource({ wrapX: false });
     const getZoom = (res) => mapRef.current?.getView().getZoomForResolution(res) ?? 3;
 
     const regionLayer = new VectorLayer({
       source: regionSource,
+      wrapX: false,
       style: makeRegionStyle({
         getTypesById: () => typesByIdRef.current,
         getColors: () => colorsRef.current,
@@ -235,6 +251,7 @@ const OlMap = ({
 
     const labelLayer = new VectorLayer({
       source: regionSource,
+      wrapX: false,
       declutter: true,
       updateWhileInteracting: false,
       updateWhileAnimating: false,
@@ -258,9 +275,10 @@ const OlMap = ({
     // Point/symbol feature layer (cities). With ~70k cities available, dots and
     // labels are gated by zoom + prominence so the whole set never renders at once
     // (capitals/large cities appear first; everything shows when zoomed in).
-    const pointSource = new VectorSource();
+    const pointSource = new VectorSource({ wrapX: false });
     const pointLayer = new VectorLayer({
       source: pointSource,
+      wrapX: false,
       declutter: true,
       updateWhileInteracting: false,
       updateWhileAnimating: false,
