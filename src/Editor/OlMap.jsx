@@ -715,12 +715,24 @@ const OlMap = ({
         const f = regionSource.getFeatureById(id);
         return f ? summarize(f) : null;
       },
+      // Every country currently on the map, sorted. Backs the Country field's
+      // suggestions, so re-owning a region offers the names that already exist
+      // rather than inviting a near-miss that forks a second country.
+      listOwners: () => {
+        const owners = new Set();
+        for (const f of regionSource.getFeatures()) {
+          const owner = f.get("owner");
+          if (owner) owners.add(String(owner));
+        }
+        return [...owners].sort((a, b) => a.localeCompare(b));
+      },
       queryRegions: (text, limit = 200) => {
         const q = (text || "").trim().toLowerCase();
         const out = [];
         for (const f of regionSource.getFeatures()) {
           if (q) {
-            const hay = `${f.getId()} ${f.get("name") || ""} ${f.get("owner") || ""} ${f.get("country") || ""}`.toLowerCase();
+            // `country` is gone from region props — owner IS the country name now.
+            const hay = `${f.getId()} ${f.get("name") || ""} ${f.get("owner") || ""}`.toLowerCase();
             if (!hay.includes(q)) continue;
           }
           out.push(summarize(f));

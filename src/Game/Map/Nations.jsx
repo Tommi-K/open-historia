@@ -521,6 +521,7 @@ const WorldMap = ({ isGlobe = false }) => {
       .catch((error) => console.error("Error loading colors:", error));
   }, []);
 
+
   // Load custom region geometry once, only when the active map declares it. Stock
   // scenarios never hit the network for this. Ownership recolors live via the
   // world poll above; the geometry itself is static per scenario.
@@ -570,9 +571,20 @@ const WorldMap = ({ isGlobe = false }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownedCodesKey, labelEpoch]);
 
+  // DEAD as it stands, and deliberately left alone rather than half-fixed. It is
+  // the only expression in the game that matches a country CODE — ["get", "GID_0"]
+  // off the stock tiles — and it cannot fire: readRuntimeJsonAsset forces
+  // customRegions:true onto every world it serves (normalizeRuntimeWorld), so
+  // showStockCountries is always false and countries-source never mounts.
+  //
+  // Its stops would need a code->name bridge to work, which is exactly the thing
+  // this rename exists to remove. It belongs in the dead-code sweep with
+  // countries-source, not in a patch that keeps codes alive to colour nothing.
+  // The layer that DOES paint the political map (stockRegionsFillPaint) matches
+  // GID_1 — a region id, not a country — and needs no bridge at all.
   const fillStyle = useMemo(() => {
-    const stops = Object.entries(colorMap).flatMap(([iso, rgb]) => [
-      iso, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+    const stops = Object.entries(colorMap).flatMap(([owner, rgb]) => [
+      owner, `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
     ]);
     const fallback = buildFallbackColorExpression();
     const regionOverrideStops = Object.entries(regionOwnershipOverrides).flatMap(([regionId, ownerCode]) => [
