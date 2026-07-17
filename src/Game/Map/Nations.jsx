@@ -62,8 +62,21 @@ const buildFallbackColorExpression = () => ([
   ["+", 64, ["*", ["index-of", ["slice", ["get", "GID_0"], 1, 2], "ABCDEFGHIJKLMNOPQRSTUVWXYZ"], 5]],
 ]);
 
-const fallbackColorFromCode = (code = "") => {
-  const normalized = String(code ?? "").toUpperCase();
+// Procedural colour for an owner with no entry in the palette. Takes the owner —
+// a country NAME now ("Russia", "Roman Empire"), not a GID_0 code.
+//
+// Stripping to A-Z first is what makes a name hash usefully. The letters are read
+// positionally, so "Côte d'Ivoire" would otherwise hash on 'C', 'Ô', 'T' — and 'Ô'
+// is not in the alphabet, so indexOf returns -1 and the channel clamps to 0. Every
+// accented or two-word name would collapse toward the same dark corner of the
+// space. Stripping gives "COTEDIVOIRE" and a colour that actually differs from its
+// neighbours'.
+//
+// NOTE this is the JS twin of buildFallbackColorExpression above, which reads
+// GID_0 off the stock tiles and must keep hashing the CODE — tile properties are
+// baked GADM and never become names.
+const fallbackColorFromOwner = (owner = "") => {
+  const normalized = String(owner ?? "").toUpperCase().replace(/[^A-Z]/g, "");
   if (normalized.length < 3) {
     return "rgb(96, 96, 96)";
   }
@@ -566,7 +579,7 @@ const WorldMap = ({ isGlobe = false }) => {
       regionId,
       colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
-        : fallbackColorFromCode(ownerCode),
+        : fallbackColorFromOwner(ownerCode),
     ]);
 
     return {
@@ -601,7 +614,7 @@ const WorldMap = ({ isGlobe = false }) => {
     for (const [regionId, ownerCode] of Object.entries(regionOwnershipOverrides)) {
       overrideColor[regionId] = colorMap[ownerCode]
         ? `rgb(${colorMap[ownerCode][0]}, ${colorMap[ownerCode][1]}, ${colorMap[ownerCode][2]})`
-        : fallbackColorFromCode(ownerCode);
+        : fallbackColorFromOwner(ownerCode);
     }
 
     return {
@@ -615,7 +628,7 @@ const WorldMap = ({ isGlobe = false }) => {
         } else if (props.owner && colorByOwner[props.owner]) {
           fillColor = colorByOwner[props.owner];
         } else if (props.owner) {
-          fillColor = fallbackColorFromCode(props.owner);
+          fillColor = fallbackColorFromOwner(props.owner);
         } else {
           fillColor = NEUTRAL_LAND_COLOR;
         }
@@ -685,7 +698,7 @@ const WorldMap = ({ isGlobe = false }) => {
         owner
           ? colorMap[owner]
             ? `rgb(${colorMap[owner][0]}, ${colorMap[owner][1]}, ${colorMap[owner][2]})`
-            : fallbackColorFromCode(owner)
+            : fallbackColorFromOwner(owner)
           : NEUTRAL_LAND_COLOR,
       );
     }

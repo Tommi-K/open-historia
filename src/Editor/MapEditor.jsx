@@ -542,9 +542,9 @@ const MapEditor = ({ onClose, scenarioName, onApplyToScenario, initialMap } = {}
           )}
           <input
             value={paintOwner}
-            onChange={(e) => setPaintOwner(e.target.value.toUpperCase())}
-            placeholder="e.g. FRA"
-            style={{ ...inputStyle, width: 90, padding: "4px 7px" }}
+            onChange={(e) => setPaintOwner(e.target.value)}
+            placeholder="e.g. France"
+            style={{ ...inputStyle, width: 160, padding: "4px 7px" }}
           />
           <span style={{ color: "rgba(255,255,255,0.4)" }}>click regions · empty = unowned</span>
         </div>

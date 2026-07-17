@@ -381,7 +381,11 @@ const OlMap = ({
       if (tool === "paint") {
         if (hit) {
           const before = hit.get("owner") || null;
-          const after = (paintOwnerRef.current || "").toUpperCase() || null;
+          // Trim, never case-fold: the owner IS the country's display name. This
+          // line is why the six uppercasers had to go together — it re-folded
+          // whatever the input handed it, so fixing the field alone looked fixed
+          // and wasn't.
+          const after = (paintOwnerRef.current || "").trim() || null;
           hit.set("owner", after);
           regionLayer.changed();
           labelLayer.changed();

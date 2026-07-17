@@ -94,9 +94,16 @@ const SelectionInspector = ({ api, selection, types, colors, colorOverrides, set
           <TextField
             value={form.owner}
             onChange={(v) => {
-              const code = v.toUpperCase();
-              setForm((f) => ({ ...f, owner: code }));
-              apply({ owner: code || null });
+              // No case-folding: the owner IS the country's display name, so
+              // "Russia" must stay "Russia".
+              //
+              // The field keeps v RAW and only what's applied is trimmed. Trimming
+              // the state would make multi-word names untypeable: "United " trims
+              // back to "United", so the next keystroke yields "UnitedS". Trimming
+              // on apply still matters — a trailing space forks a second polity
+              // that looks identical to a human.
+              setForm((f) => ({ ...f, owner: v }));
+              apply({ owner: v.trim() || null });
             }}
             width={96}
           />
