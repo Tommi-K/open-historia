@@ -451,6 +451,37 @@ const OlMap = ({
       onSelectionRef.current?.(next);
     });
 
+    // Double-click with Select = select the whole country. Picking one region at a
+    // time to recolour or retag a country is the most common thing a map-maker does
+    // here, and countries run to 35+ regions.
+    //
+    // Returning false is load-bearing: the map takes ol's default interactions,
+    // which include DoubleClickZoom, and ol skips them entirely when a dblclick
+    // listener returns false. Without it you'd select the country AND zoom into it.
+    // singleclick needs no guard — ol holds it for 250ms and cancels it outright
+    // when the second click arrives, so these two never both fire.
+    map.on("dblclick", (evt) => {
+      if (activeToolRef.current !== "select") return undefined; // let dbl-click zoom work
+      let hit = null;
+      map.forEachFeatureAtPixel(
+        evt.pixel,
+        (feature) => {
+          hit = feature;
+          return true;
+        },
+        { layerFilter: (l) => l === regionLayerRef.current, hitTolerance: 2 },
+      );
+      if (!hit) return undefined;
+      const owner = hit.get("owner") || null;
+      // Unowned land has no country to gather, so fall back to just this region —
+      // "every unowned region on the map" is never what the double-click meant.
+      const ids = owner
+        ? regionSource.getFeatures().filter((f) => (f.get("owner") || null) === owner).map((f) => f.getId())
+        : [hit.getId()];
+      onSelectionRef.current?.(ids);
+      return false;
+    });
+
     map.on("pointermove", (evt) => {
       if (evt.dragging) return;
       const hit = map.hasFeatureAtPixel(evt.pixel, {
