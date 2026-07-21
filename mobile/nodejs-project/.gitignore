@@ -1,0 +1,13 @@
+# The Node project the Android app runs is ASSEMBLED by
+# scripts/build-mobile-server.mjs (server/, the built dist/, express, the seed
+# snapshot, the map manifest). That is build output, not source — never commit it.
+# Only main.js, fetchMapAssets.mjs, and this file are tracked.
+/server/
+/dist/
+/public/
+/seed/
+/node_modules/
+/runtime-data/
+/map-assets.json
+/package.json
+/package-lock.json

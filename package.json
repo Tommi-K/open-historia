@@ -10,6 +10,7 @@
     "dev": "vite",
     "dev:web": "node scripts/seed-web-defaults.mjs && vite --mode web",
     "build": "vite build",
+    "build:mobile-server": "node scripts/build-mobile-server.mjs",
     "build:web": "node scripts/seed-web-defaults.mjs && vite build --mode web --outDir dist-web --emptyOutDir",
     "build:site": "node scripts/seed-web-defaults.mjs && vite build --mode web --base /play/ --outDir dist-web --emptyOutDir && node scripts/assemble-site.mjs",
     "lint": "eslint .",
