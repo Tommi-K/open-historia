@@ -1,4 +1,4 @@
-<!-- Open Historia — Android app shell (connect screen + self-update) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). -->
+<!-- Open Historia — Android app shell (embedded server boot + self-update) © 2026 Nicholas Krol, MIT (see src/Editor/LICENSE). -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -62,26 +62,31 @@
         font-weight: 600;
       }
       .error { color: #f87171; font-size: 0.82rem; min-height: 1.1em; }
-      #connecting { display: none; }
+      .muted { color: rgba(255,255,255,0.4); font-size: 0.75rem; }
     </style>
   </head>
   <body>
-    <div class="card" id="setup">
+    <!-- Booting the on-device server (the default, zero-setup path). -->
+    <div class="card" id="booting">
+      <h1>Open Historia</h1>
+      <p id="bootStatus">Starting your server…</p>
+      <p class="muted" id="bootSub">First launch downloads the world map (~200&nbsp;MB); later launches are instant.</p>
+      <button class="ghost" id="useRemote" style="display:none">Connect to a different server instead</button>
+    </div>
+
+    <!-- Manual connect: fallback if the embedded server can't start, or to reach
+         a Termux / desktop / LAN server on purpose. -->
+    <div class="card" id="setup" style="display:none">
       <h1>Open Historia</h1>
       <p>
-        This app connects to a running Open Historia server — the one on this phone
+        Connect to a running Open Historia server — the one on this phone
         (Termux: <b>localhost:3000</b>) or any computer on your network.
       </p>
       <input id="server" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
              placeholder="http://localhost:3000" value="http://localhost:3000" />
       <button id="connect">Connect &amp; Play</button>
+      <button class="ghost" id="useEmbedded">Use this phone's built-in server</button>
       <div class="error" id="error"></div>
-    </div>
-
-    <div class="card" id="connecting">
-      <h1>Open Historia</h1>
-      <p id="connectingTo">Connecting…</p>
-      <button class="ghost" id="cancel">Change server</button>
     </div>
 
     <div class="card" id="update" style="display: none">
@@ -97,19 +102,24 @@
 
     <script>
       const KEY = "pax-server-url";
-      // Stamped with the CI run number at build time; hand-built ("dev")
-      // copies skip the update check entirely.
+      // The embedded server always listens here. Kept in sync with
+      // mobile/nodejs-project/main.js (process.env.PORT default).
+      const EMBEDDED_URL = "http://127.0.0.1:3000";
       const APP_BUILD = "__APP_BUILD__";
-      // Self-update polls the organisation repository's rolling "android"
-      // release (the android-apk.yml workflow publishes there) — the asset
-      // name pax-historia.apk must never change (installed apps look for
-      // exactly that name).
       const RELEASE_API = "https://api.github.com/repos/Open-Historia/open-historia/releases/tags/android";
+
+      const booting = document.getElementById("booting");
       const setup = document.getElementById("setup");
-      const connecting = document.getElementById("connecting");
+      const bootStatus = document.getElementById("bootStatus");
       const input = document.getElementById("server");
       const errorBox = document.getElementById("error");
       let autoTimer = null;
+
+      const show = (el) => {
+        for (const id of ["booting", "setup", "update"]) {
+          document.getElementById(id).style.display = id === el ? "flex" : "none";
+        }
+      };
 
       const normalize = (raw) => {
         let url = String(raw || "").trim();
@@ -118,30 +128,19 @@
         return url.replace(/\/+$/, "");
       };
 
-      // Probe via NATIVE http when available: the WebView's fetch is subject
-      // to CORS and Chrome's Private Network Access rules for loopback
-      // targets ("TypeError: Failed to fetch" with the server running fine),
-      // while native requests are not. Navigation afterwards is unaffected by
-      // those policies, and the game then runs same-origin on the server.
-      const probe = async (url) => {
+      // Probe via NATIVE http when available: the WebView's fetch is subject to
+      // CORS and Chrome's Private Network Access rules for loopback targets,
+      // while native requests are not. Navigation afterwards is unaffected.
+      const probe = async (url, timeout = 4000) => {
         const native = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp;
         if (native) {
-          const res = await native.request({
-            url: url + "/api/library",
-            method: "GET",
-            connectTimeout: 4000,
-            readTimeout: 4000,
-          });
-          if (!res || res.status < 100 || res.status >= 500) {
-            throw new Error("HTTP " + (res && res.status));
-          }
+          const res = await native.request({ url: url + "/api/library", method: "GET", connectTimeout: timeout, readTimeout: timeout });
+          if (!res || res.status < 100 || res.status >= 500) throw new Error("HTTP " + (res && res.status));
           return;
         }
-        await fetch(url + "/api/library", { signal: AbortSignal.timeout(4000) });
+        await fetch(url + "/api/library", { signal: AbortSignal.timeout(timeout) });
       };
 
-      // Probe the server first so a typo shows an error here instead of a
-      // WebView error page the user can't navigate back from.
       const connect = async (raw) => {
         const url = normalize(raw);
         if (!url) return;
@@ -151,98 +150,108 @@
           localStorage.setItem(KEY, url);
           window.location.replace(url);
         } catch (err) {
-          showSetup();
-          // Show the real failure — "TypeError: Failed to fetch" vs a timeout
-          // point at very different problems when debugging on a phone.
+          show("setup");
           const detail = err && err.name ? " (" + err.name + (err.message ? ": " + err.message : "") + ")" : "";
           errorBox.textContent = "Could not reach " + url + " — is the server running?" + detail;
         }
       };
 
-      const showSetup = () => {
-        if (autoTimer) clearTimeout(autoTimer);
-        connecting.style.display = "none";
-        setup.style.display = "flex";
-      };
+      const showSetup = () => { if (autoTimer) clearTimeout(autoTimer); show("setup"); };
 
       document.getElementById("connect").addEventListener("click", () => connect(input.value));
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") connect(input.value); });
-      document.getElementById("cancel").addEventListener("click", showSetup);
+      document.getElementById("useEmbedded").addEventListener("click", () => startEmbeddedServer(true));
 
-      const startNormalFlow = () => {
-        // A remembered server auto-connects after a short grace period.
-        const saved = localStorage.getItem(KEY);
-        if (saved) {
-          input.value = saved;
-          setup.style.display = "none";
-          connecting.style.display = "flex";
-          document.getElementById("connectingTo").textContent = "Connecting to " + saved + "…";
-          autoTimer = setTimeout(() => connect(saved), 1500);
-        } else {
-          // First launch: look for a Termux server on this phone — if it's
-          // there, go straight into the game with zero typing.
-          const guess = "http://localhost:3000";
-          setup.style.display = "none";
-          connecting.style.display = "flex";
-          document.getElementById("connectingTo").textContent = "Looking for a server on this phone…";
-          probe(guess)
-            .then(() => {
-              localStorage.setItem(KEY, guess);
-              window.location.replace(guess);
-            })
-            .catch(() => {
-              showSetup();
-              errorBox.textContent = "";
-            });
+      // ── Embedded server ──────────────────────────────────────────────────────
+      // nodejs-mobile-cordova exposes window.nodejs. main.js starts the real
+      // server (server/server.js) on 127.0.0.1:3000 with a writable data dir.
+      // We poll until it answers, then navigate into it same-origin.
+      let nodeStarted = false;
+      const startNode = () => {
+        if (nodeStarted) return true;
+        const nodejs = window.nodejs;
+        if (!nodejs || typeof nodejs.start !== "function") return false;
+        try {
+          // redirectOutputToLogcat helps debugging the embedded server on device.
+          nodejs.start("main.js", (err) => { if (err) console.error("[app] nodejs.start error:", err); },
+            { redirectOutputToLogcat: true });
+          nodeStarted = true;
+          return true;
+        } catch (err) {
+          console.error("[app] failed to start embedded node:", err);
+          return false;
         }
       };
 
-      // APK self-update: every launch compares this build against the rolling
-      // "android" release; a newer one auto-downloads (the native download
-      // listener hands the APK to the system browser). Only the app does this
-      // — the regular web version never ships this page.
+      const waitForServer = async () => {
+        // The first cold start (extract project + install/seed) can take a while.
+        const deadline = Date.now() + 90000;
+        while (Date.now() < deadline) {
+          try { await probe(EMBEDDED_URL, 3000); return true; }
+          catch { await new Promise((r) => setTimeout(r, 1500)); }
+        }
+        return false;
+      };
+
+      const startEmbeddedServer = async (forced) => {
+        show("booting");
+        bootStatus.textContent = "Starting your server…";
+        if (!startNode()) {
+          // No nodejs-mobile (e.g. an old build) — fall back to manual connect.
+          if (forced) errorBox.textContent = "This build has no built-in server; connect to one instead.";
+          showSetup();
+          return;
+        }
+        const up = await waitForServer();
+        if (up) {
+          localStorage.setItem(KEY, EMBEDDED_URL);
+          window.location.replace(EMBEDDED_URL);
+        } else {
+          bootStatus.textContent = "The built-in server didn't respond.";
+          document.getElementById("useRemote").style.display = "block";
+          document.getElementById("useRemote").addEventListener("click", showSetup, { once: true });
+        }
+      };
+
+      // ── Normal launch flow ───────────────────────────────────────────────────
+      const startNormalFlow = () => {
+        // A server the user explicitly chose before (a remote/LAN one) auto-reconnects.
+        const saved = localStorage.getItem(KEY);
+        if (saved && saved !== EMBEDDED_URL) {
+          input.value = saved;
+          show("booting");
+          bootStatus.textContent = "Connecting to " + saved + "…";
+          autoTimer = setTimeout(() => connect(saved), 1200);
+          return;
+        }
+        // Default: boot this phone's own server.
+        startEmbeddedServer(false);
+      };
+
+      // ── Self-update (unchanged) ───────────────────────────────────────────────
       const checkForUpdate = async () => {
         if (!/^\d+$/.test(APP_BUILD)) return null; // dev build
         try {
-          const response = await fetch(RELEASE_API, {
-            headers: { Accept: "application/vnd.github+json" },
-            signal: AbortSignal.timeout(4000),
-          });
+          const response = await fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(4000) });
           if (!response.ok) return null;
           const release = await response.json();
           const remote = String(release.body || "").match(/Build:\s*(\d+)/i);
           if (!remote || Number(remote[1]) <= Number(APP_BUILD)) return null;
           const asset = (release.assets || []).find((a) => a.name === "pax-historia.apk");
           return asset ? { build: remote[1], url: asset.browser_download_url } : null;
-        } catch {
-          return null; // offline / rate-limited — just play
-        }
+        } catch { return null; }
       };
 
       checkForUpdate().then((update) => {
-        if (!update) {
-          startNormalFlow();
-          return;
-        }
-        setup.style.display = "none";
-        connecting.style.display = "none";
-        document.getElementById("update").style.display = "flex";
-        // Explicit button — the reliable path. (The download is handed to the
-        // system browser by the native download listener.)
-        document.getElementById("downloadUpdate").addEventListener("click", () => {
-          window.location.href = update.url;
-        });
-        document.getElementById("skipUpdate").addEventListener("click", () => {
-          document.getElementById("update").style.display = "none";
-          startNormalFlow();
-        });
+        if (!update) { startNormalFlow(); return; }
+        show("update");
+        document.getElementById("downloadUpdate").addEventListener("click", () => { window.location.href = update.url; });
+        document.getElementById("skipUpdate").addEventListener("click", () => { startNormalFlow(); });
       });
 
-      // Which build is this? Shown in the corner so bug reports can say.
       const badge = document.createElement("div");
       badge.textContent = "build " + (/^\d+$/.test(APP_BUILD) ? APP_BUILD : "dev");
-      badge.style.cssText =
-        "position:fixed;bottom:0.6rem;right:0.9rem;color:rgba(255,255,255,0.28);font-size:0.7rem;";
+      badge.style.cssText = "position:fixed;bottom:0.6rem;right:0.9rem;color:rgba(255,255,255,0.28);font-size:0.7rem;";
       document.body.appendChild(badge);
     </script>
   </body>

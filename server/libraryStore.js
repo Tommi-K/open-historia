@@ -13,18 +13,23 @@ import {
   needsMigration as needsOwnerMigration,
   rekeyOwnerMap,
 } from "./ownerMigration.js";
+import { DATA_DIR as SERVER_DATA_DIR } from "./dataDir.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, "..");
 const DIST_DIR = path.join(PROJECT_ROOT, "dist");
 const PUBLIC_DIR = path.join(PROJECT_ROOT, "public");
-const SERVER_DATA_DIR = path.join(__dirname, "data");
 const SCENARIOS_DIR = path.join(SERVER_DATA_DIR, "scenarios");
 const GAMES_DIR = path.join(SERVER_DATA_DIR, "games");
 const SCENARIO_MANIFEST_PATH = path.join(SERVER_DATA_DIR, "scenario-manifest.json");
 const GAME_MANIFEST_PATH = path.join(SERVER_DATA_DIR, "game-manifest.json");
 
 const PMTILES_ASSETS_DIR = path.join(PUBLIC_DIR, "assets");
+// The embedded Android server ships no pmtiles in its read-only bundle; it
+// downloads them into OH_DATA_DIR/assets on first run (see the app's
+// fetchMapAssets). Desktop has no such dir, so this simply doesn't exist there
+// and serving falls through to PMTILES_ASSETS_DIR unchanged.
+const DATA_ASSETS_DIR = path.join(SERVER_DATA_DIR, "assets");
 
 const DEFAULT_SCENARIO_ID = "default";
 const DEFAULT_GAME_ID = "default";
@@ -2371,6 +2376,12 @@ const resolveRuntimeBinaryAsset = (assetKey) => {
       contentType: "application/octet-stream",
       sourcePath: scenarioOverridePath,
     };
+  }
+
+  // Embedded server: prefer the pmtiles fetched into the writable data dir.
+  const fetchedPath = path.join(DATA_ASSETS_DIR, PMTILES_ASSET_FILES[assetKey]);
+  if (fs.existsSync(fetchedPath)) {
+    return { contentType: "application/octet-stream", sourcePath: fetchedPath };
   }
 
   const fallbackPath = path.join(PMTILES_ASSETS_DIR, PMTILES_ASSET_FILES[assetKey]);

@@ -54,6 +54,7 @@ import {
   isAllowedHubUrl,
   parseByteRange,
 } from "./security.js";
+import { DATA_DIR } from "./dataDir.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const app = express();
@@ -157,7 +158,7 @@ const streamBinaryFile = (req, res, sourcePath, contentType = "application/octet
 // Global client preferences (currently the UI language) shared by every
 // device that plays through this server — the phone app and desktop browser
 // see the same choice, instead of each browser keeping its own.
-const uiSettingsFile = path.join(__dirname, "data", "ui-settings.json");
+const uiSettingsFile = path.join(DATA_DIR, "ui-settings.json");
 
 const readUiSettings = () => {
   try {
@@ -180,7 +181,7 @@ app.get("/api/ui-settings", (_req, res) => {
 const shippedLangDir = fs.existsSync(path.join(distDir, "lang"))
   ? path.join(distDir, "lang")
   : path.join(__dirname, "../public/lang");
-const savedLangDir = path.join(__dirname, "data", "lang");
+const savedLangDir = path.join(DATA_DIR, "lang");
 
 const readLangPack = (dir, code) => {
   try {
@@ -565,7 +566,7 @@ app.post("/api/server/shutdown", (_req, res) => {
 // bumping its GitHub download count — the second import onward is served locally
 // and never touches GitHub. Bundle URLs are immutable (a new version gets a new
 // URL), so a cached copy can't go stale. Keyed on the requested URL.
-const HUB_CACHE_DIR = path.join(__dirname, "data", "hub-cache");
+const HUB_CACHE_DIR = path.join(DATA_DIR, "hub-cache");
 const hubCachePaths = (fileUrl) => {
   const hash = crypto.createHash("sha256").update(fileUrl).digest("hex");
   return { body: path.join(HUB_CACHE_DIR, `${hash}.body`), type: path.join(HUB_CACHE_DIR, `${hash}.type`) };
@@ -652,7 +653,7 @@ app.get("/api/hub/file", async (req, res) => {
 const IMPORT_COUNTER_URL = (
   process.env.OH_IMPORT_COUNTER_URL ?? "https://oh-import-counter.nichojkrol.workers.dev"
 ).replace(/\/+$/, "");
-const IMPORT_PING_DIR = path.join(__dirname, "data", "import-pings");
+const IMPORT_PING_DIR = path.join(DATA_DIR, "import-pings");
 app.post("/api/hub/import-log", jsonParser, (req, res) => {
   res.json({ ok: true }); // ack at once — telemetry must never delay or fail the import
   (async () => {

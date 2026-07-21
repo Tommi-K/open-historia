@@ -10,11 +10,9 @@
 
 import fs from "fs";
 import path from "path";
-import url from "url";
 import { resolveChildPath } from "./security.js";
+import { DATA_DIR } from "./dataDir.js";
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, "data");
 const DOCS_DIR = path.join(DATA_DIR, "mapeditor-documents");
 const MANIFEST_PATH = path.join(DATA_DIR, "mapeditor-manifest.json");
 

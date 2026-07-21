@@ -14,11 +14,9 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import url from "url";
 import { resolveChildPath } from "./security.js";
+import { DATA_DIR } from "./dataDir.js";
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, "data");
 const BASEMAPS_DIR = path.join(DATA_DIR, "basemaps");
 const MANIFEST_PATH = path.join(DATA_DIR, "basemaps-manifest.json");
 
