@@ -960,7 +960,14 @@ const OlMap = ({
       added.push(draw, new Snap({ source })); // Snap last so it sees events first
     } else if (activeTool === "modify") {
       const modify = new Modify({ source });
-      modify.on("modifyend", notifyRegions);
+      modify.on("modifyend", (e) => {
+        // Dragging a vertex changes the region's geometry, so the stock GADM tile
+        // no longer describes it: mark it edited so the exporter ships this shape
+        // and the game renders it from the GeoJSON instead of the original tile
+        // (which would otherwise paint the old shape over it — a darker seam).
+        for (const f of e.features?.getArray?.() ?? []) f.set("edited", true);
+        notifyRegions();
+      });
       added.push(modify, new Snap({ source }));
     } else if (activeTool === "move") {
       const translate = new Translate({ layers: [layer], hitTolerance: 2 });

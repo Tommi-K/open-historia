@@ -69,6 +69,12 @@ const normalizeRegionsForGame = (regionsFC) => {
         // No `country`: owner IS the country's name.
         typeId: props.typeId ? String(props.typeId) : "land",
         ...(claimants.length ? { claimants } : {}),
+        // A GADM region the editor reshaped (draw-carve, vertex edit). Its true
+        // geometry now lives in THIS GeoJSON, not the stock tiles — which still
+        // hold the original shape. The game reads this to render the region from
+        // the GeoJSON at every zoom and keep it OUT of the stock-tile fill, so the
+        // reshaped area isn't painted twice and shaded too dark (see Nations.jsx).
+        ...(props.edited ? { edited: true } : {}),
       },
     });
   }
@@ -180,19 +186,20 @@ export const buildGameSeed = (doc, regionsFC, palette = {}, { playerCountry } = 
     colors[owner] = rgb;
 
     // A polity entry exists to tell the game and the model about a country the
-    // stock world has never heard of. That test used to be /^[A-Z]{2,3}$/ — "is
-    // this owner shaped like a GADM code?" — which worked only while owners WERE
-    // codes. Against names it inverts: "Russia" isn't code-shaped, so every real
-    // country would get a spurious polity, while a map-maker who names a country
-    // "USA" or "UAE" still trips the regex and gets NO entry, leaving the model
-    // with no idea their country exists. Ask the real question instead: does the
-    // stock world already know this name?
-    // Also skip an owner that is a known CODE, not just a known name. A document
-    // authored before the rename still owns regions by "MNG", and emitting
-    // {"MNG": {name: "MNG"}} for it is actively harmful: a self-naming polity
-    // shadows the registry in every write-path resolver, so that token can never
-    // become "Mongolia" again. Say nothing and let the registry name it.
-    if (!STOCK_COUNTRY_NAMES.has(owner) && !COUNTRY_NAMES[owner]) {
+    // stock world has never heard of. The test is simply "does the stock world
+    // already know this NAME?": "Russia" is stock and needs no entry, while any
+    // name a map-maker invents does — including one shaped like a GADM code.
+    //
+    // A name that COLLIDES with a code ("USA", "RUS") is the subtle case. It used to
+    // be excluded here (`&& !COUNTRY_NAMES[owner]`) to stop a legacy document's "MNG"
+    // from self-naming a polity that pins it away from "Mongolia" forever. But that
+    // also meant a map-maker who deliberately named a country "USA" got NO entry and
+    // watched it silently canonicalised to "United States" on export. A legacy doc no
+    // longer reaches here still wearing a code — documentMigration turns "MNG" into
+    // "Mongolia" on open — so the only code-shaped owner left at export IS one a human
+    // typed. Emit it, and mark it `verbatim` so the owner resolvers keep it literally
+    // instead of resolving the code (see resolveOwnerName in server/ownerMigration.js).
+    if (!STOCK_COUNTRY_NAMES.has(owner)) {
       polityOverrides[owner] = {
         // No `code`: the key IS the identifier now. `name` mirrors the key because
         // readers expect the field, not because they can differ.
@@ -200,6 +207,9 @@ export const buildGameSeed = (doc, regionsFC, palette = {}, { playerCountry } = 
         aliases: [],
         color: `#${rgb.map((n) => n.toString(16).padStart(2, "0")).join("")}`,
         note: "",
+        // Only a real code-collision needs protecting; a plain invented name
+        // ("Freedonia") already resolves to itself with or without the flag.
+        ...(COUNTRY_NAMES[owner] ? { verbatim: true } : {}),
       };
     }
   }
