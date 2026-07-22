@@ -90,6 +90,12 @@ export const resolveOwnerRef = (value, world) => {
 
   const lower = raw.toLowerCase();
   const overrides = world?.polityOverrides;
+  // A polity the map editor marked `verbatim` was named by a human whose text
+  // collides with a GADM code ("USA"); honour it literally rather than
+  // canonicalising it to the code's country. Nothing else sets this flag, so
+  // legacy and model-written owners are untouched. Mirrors server/libraryStore.js.
+  const verbatimPolity = overrides?.[raw];
+  if (verbatimPolity?.verbatim) return String(verbatimPolity.name ?? raw).trim() || raw;
   if (overrides && typeof overrides === "object") {
     for (const [key, polity] of Object.entries(overrides)) {
       const name = String(polity?.name ?? key).trim();
