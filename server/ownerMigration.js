@@ -39,6 +39,15 @@ export const resolveOwnerName = (token, ctx = {}) => {
 
   const { polityOverrides, countryNameOverrides, registry, features, ownershipOverrides } = ctx;
 
+  // 0. A polity the map editor marked `verbatim`. The author typed this exact name
+  //    and it happens to collide with a GADM code ("USA", "RUS"); take it literally
+  //    so the editor never "corrects" it to the code's country ("United States").
+  //    Only the editor sets this flag, and only for a name a human actually typed —
+  //    legacy code owners, disputed placeholders (Z01), and model output carry no
+  //    such flag, so every existing resolution below is unchanged.
+  const verbatimPolity = polityOverrides?.[raw];
+  if (verbatimPolity?.verbatim) return str(verbatimPolity.name) || raw;
+
   // 1. The scenario's own polity. Catches ROM → "Roman Empire", SOV → "Soviet Union".
   //
   //    The `name !== token` guard is load-bearing. default/world.json carries 9

@@ -200,6 +200,15 @@ const CUSTOM_FILL_COLOR = ["get", "_fillColor"];
 // zoom, on top — the tiles don't know those shapes.
 const CUSTOM_GEOMETRY_FILTER = ["==", ["index-of", ".", ["get", "id"]], -1];
 const GADM_GEOMETRY_FILTER = [">=", ["index-of", ".", ["get", "id"]], 0];
+// A feature whose geometry lives ONLY in the GeoJSON: author-drawn ("reg_...", no
+// dot) OR a GADM region the editor reshaped (dotted id, but `edited`). Both must
+// render from the GeoJSON at every zoom AND be kept out of the stock tiles, whose
+// geometry is the ORIGINAL shape — painting both stacks two 0.72 fills and darkens
+// the reshaped area. A plain unedited GADM region carries no `edited`, so
+// ["==", ["get","edited"], true] is false for it and these fall back exactly to the
+// dot test — stock and author-only maps render identically to before.
+const AUTHORED_GEOMETRY_FILTER = ["any", CUSTOM_GEOMETRY_FILTER, ["==", ["get", "edited"], true]];
+const STOCK_GEOMETRY_FILTER = ["all", GADM_GEOMETRY_FILTER, ["!=", ["get", "edited"], true]];
 // Crossfade band: seed geometry was extracted at tile-zoom 5, so hand off to
 // the tiles just past that.
 const FAR_FILL_FADE = ["interpolate", ["linear"], ["zoom"], 5.5, 0.72, 6.5, 0];
@@ -933,20 +942,39 @@ const WorldMap = ({ isGlobe = false }) => {
   // GADM regions on custom maps paint the STOCK vector tiles (sharp geometry at
   // every zoom — the coarse seed polygons left sliver gaps up close). Only
   // author-drawn shapes still render from the GeoJSON, on top.
+  // Dotted (GADM) ids the editor reshaped: their true geometry is the GeoJSON's, so
+  // the stock tiles — which still carry the ORIGINAL shape — must not paint them, or
+  // the reshaped area fills twice and reads a shade too dark. Empty on stock and
+  // author-only maps, where every change below is a no-op.
+  const editedStockIds = useMemo(() => {
+    if (!customActive) return [];
+    const ids = [];
+    for (const f of customRegionData?.features ?? []) {
+      const props = f.properties || {};
+      if (props.edited && String(props.id ?? "").includes(".")) ids.push(String(props.id));
+    }
+    return ids;
+  }, [customActive, customRegionData]);
+
   const stockRegionsFillPaint = useMemo(() => {
     if (!customActive) return { "fill-opacity": 0 };
     const stops = [];
     for (const [regionId, owner] of ownerByRegionId) {
       if (!regionId.includes(".")) continue; // drawn regions aren't in the tiles
+      if (editedStockIds.includes(regionId)) continue; // reshaped — the GeoJSON owns it
       stops.push(regionId, owner ? ownerColorCss(owner) : NEUTRAL_LAND_COLOR);
     }
     if (!stops.length) return { "fill-opacity": 0 };
     return {
       "fill-color": ["match", ["get", "GID_1"], ...stops, NEUTRAL_LAND_COLOR],
-      // Fades in as the seed-geometry far layer fades out.
-      "fill-opacity": TILE_FILL_FADE,
+      // Fades in as the seed-geometry far layer fades out — but never for a reshaped
+      // region: its tile still holds the original shape, so painting it here would
+      // double-fill the edited area over the GeoJSON that now owns it.
+      "fill-opacity": editedStockIds.length
+        ? ["case", ["in", ["get", "GID_1"], ["literal", editedStockIds]], 0, TILE_FILL_FADE]
+        : TILE_FILL_FADE,
     };
-  }, [customActive, ownerByRegionId, colorMap, ownerColorCss]);
+  }, [customActive, ownerByRegionId, colorMap, ownerColorCss, editedStockIds]);
 
   // Stock country fills/borders render ONLY once the world is known to be a
   // stock world. Gating on the customRegions FLAG (not customActive, which
@@ -1071,7 +1099,11 @@ const WorldMap = ({ isGlobe = false }) => {
             id="regions-disputed"
             type="fill"
             source-layer="regions"
-            filter={["in", ["get", "GID_1"], ["literal", disputedTileStops.filter((_, i) => i % 2 === 0)]]}
+            filter={editedStockIds.length
+              ? ["all",
+                ["in", ["get", "GID_1"], ["literal", disputedTileStops.filter((_, i) => i % 2 === 0)]],
+                ["!", ["in", ["get", "GID_1"], ["literal", editedStockIds]]]]
+              : ["in", ["get", "GID_1"], ["literal", disputedTileStops.filter((_, i) => i % 2 === 0)]]}
             paint={{
               "fill-pattern": ["match", ["get", "GID_1"], ...disputedTileStops, disputedTileStops[1]],
               "fill-opacity": customActive && worldKnown ? TILE_FILL_FADE : 0,
@@ -1082,6 +1114,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="regions-outline"
           type="line"
           source-layer="regions"
+          filter={editedStockIds.length ? ["!", ["in", ["get", "GID_1"], ["literal", editedStockIds]]] : undefined}
           paint={regionsOutlinePaint}
         />
       </Source>
@@ -1100,7 +1133,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="custom-regions-fill-far"
           type="fill"
           maxzoom={7}
-          filter={GADM_GEOMETRY_FILTER}
+          filter={STOCK_GEOMETRY_FILTER}
           paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
         />
         {/* Far hairlines from the SAME seed geometry as the far fills, so
@@ -1110,7 +1143,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="custom-regions-hairline-far"
           type="line"
           maxzoom={7}
-          filter={GADM_GEOMETRY_FILTER}
+          filter={STOCK_GEOMETRY_FILTER}
           paint={{
             "line-color": "#000",
             "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.3, 6.5, 0.6],
@@ -1127,25 +1160,25 @@ const WorldMap = ({ isGlobe = false }) => {
           id="custom-regions-disputed-far"
           type="fill"
           maxzoom={7}
-          filter={["all", GADM_GEOMETRY_FILTER, ["has", "_stripes"]]}
+          filter={["all", STOCK_GEOMETRY_FILTER, ["has", "_stripes"]]}
           paint={{ "fill-pattern": ["get", "_stripes"], "fill-opacity": customActive ? FAR_FILL_FADE : 0 }}
         />
         <Layer
           id="custom-regions-fill"
           type="fill"
-          filter={CUSTOM_GEOMETRY_FILTER}
+          filter={AUTHORED_GEOMETRY_FILTER}
           paint={{ "fill-color": CUSTOM_FILL_COLOR, "fill-opacity": 0.72 }}
         />
         <Layer
           id="custom-regions-disputed"
           type="fill"
-          filter={["all", CUSTOM_GEOMETRY_FILTER, ["has", "_stripes"]]}
+          filter={["all", AUTHORED_GEOMETRY_FILTER, ["has", "_stripes"]]}
           paint={{ "fill-pattern": ["get", "_stripes"], "fill-opacity": customActive ? 0.72 : 0 }}
         />
         <Layer
           id="custom-regions-outline"
           type="line"
-          filter={CUSTOM_GEOMETRY_FILTER}
+          filter={AUTHORED_GEOMETRY_FILTER}
           paint={{
             "line-color": "#000",
             "line-width": [
