@@ -128,6 +128,31 @@ test("the name !== token guard: a self-named degenerate must not win", () => {
   assert.equal(resolveOwnerName("Z01", ctx), "India");
 });
 
+test("a verbatim polity is taken literally even when its token is a registry code", () => {
+  // The map editor lets an author name a country "RUS". Rule 3 would canonicalise it
+  // to "Russia"; the editor marks such a collision `verbatim` so the typed name is
+  // kept. This is rule 0 — it must beat the registry.
+  const flagged = DEFAULT_LIKE();
+  flagged.world.polityOverrides.RUS = { name: "RUS", aliases: [], color: "#112233", note: "", verbatim: true };
+  assert.equal(resolveOwnerName("RUS", ctxOf(flagged)), "RUS");
+  // The flag is the ONLY thing that changes: the same token unflagged still resolves
+  // to the registry country, so legacy and model-written codes are untouched.
+  assert.equal(resolveOwnerName("RUS", ctxOf(DEFAULT_LIKE())), "Russia");
+});
+
+test("a verbatim owner survives migration with its polity intact", () => {
+  const f = DEFAULT_LIKE();
+  f.world.regionOwnershipOverrides["FRA.1_1"] = "FRA";
+  f.world.polityOverrides.FRA = { name: "FRA", aliases: [], color: "#112233", note: "", verbatim: true };
+  const renames = buildOwnerRenameMap(ctxOf(f));
+  const migrated = migrateWorld(f.world, renames, () => {});
+  // The owner is NOT rewritten to "France", and its polity is NOT dropped as a
+  // degenerate self-name — the two failure modes the flag exists to prevent.
+  assert.equal(migrated.regionOwnershipOverrides["FRA.1_1"], "FRA");
+  assert.equal(migrated.polityOverrides.FRA?.name, "FRA");
+  assert.equal(migrated.polityOverrides.FRA?.verbatim, true);
+});
+
 test("rule 2 is the only thing that saves a legacy label", () => {
   const f = DEFAULT_LIKE();
   f.meta.countryNameOverrides = { THA: "Siam" }; // wwii-1939's hand-authored label
