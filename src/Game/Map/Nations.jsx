@@ -1114,7 +1114,7 @@ const WorldMap = ({ isGlobe = false }) => {
           id="regions-outline"
           type="line"
           source-layer="regions"
-          filter={editedStockIds.length ? ["!", ["in", ["get", "GID_1"], ["literal", editedStockIds]]] : undefined}
+          filter={editedStockIds.length ? ["!", ["in", ["get", "GID_1"], ["literal", editedStockIds]]] : ["all"]}
           paint={regionsOutlinePaint}
         />
       </Source>
