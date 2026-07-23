@@ -5,7 +5,7 @@
 // ciphertext. Uses a full-scan model (compare local SHA-256 vs the last synced
 // version) so no write can be missed — no fragile idb write hooks. Web build only.
 
-import { idbGetAll, idbPut, idbDelete, kvGet, kvPut, STORES } from "./idb.js";
+import { idbGet, idbGetAll, idbGetAllKeys, idbPut, idbDelete, kvGet, kvPut, STORES } from "./idb.js";
 import {
   accountConfigured, isSignedIn, getDek, recordFingerprint, encryptRecord, decryptRecord,
   syncManifest, syncGetBlob, syncPutBlob, syncDeleteBlob,
@@ -41,15 +41,28 @@ const cachedFingerprint = async (blobId, rec) => {
   return sha;
 };
 
-// Read every syncable local record as blob_id → { rec, sha }.
-const collectLocal = async () => {
+// Read every syncable local record as blob_id → { rec, sha }. `versions` (the last-
+// synced state) lets us RELEASE the full record for anything that hasn't changed, so a
+// store of ~100MB scenario records is never held in memory all at once — the every-20s
+// twin of the menu OOM. Every record is still fingerprinted, so no change is missed.
+const collectLocal = async (versions = {}) => {
   const local = new Map();
   for (const { store, prefix } of SYNCED_STORES) {
-    for (const rec of await idbGetAll(store)) {
+    // Keys-only, then one idbGet at a time (peak = a single record, not the whole store).
+    for (const id of await idbGetAllKeys(store)) {
+      const blobId = prefix + id;
       // Skip (don't abort the whole sync over) a record that can't be
       // fingerprinted, e.g. one holding a value JSON can't serialize.
-      try { local.set(prefix + rec.id, { rec, sha: await cachedFingerprint(prefix + rec.id, rec) }); }
-      catch (e) { console.warn(`[sync] skip local ${prefix}${rec.id}: ${e.message}`); }
+      try {
+        const rec = await idbGet(store, id);
+        if (!rec) continue;
+        const sha = await cachedFingerprint(blobId, rec);
+        const known = versions[blobId];
+        // Retain the full record only when push will actually upload it (new/changed);
+        // otherwise drop it now. push skips unchanged via known.sha===sha before it
+        // ever reads rec, so null here is safe.
+        local.set(blobId, { sha, rec: known && !known.deleted && known.sha === sha ? null : rec });
+      } catch (e) { console.warn(`[sync] skip local ${prefix}${id}: ${e.message}`); }
     }
   }
   for (const name of KV_MANIFESTS) {
@@ -103,7 +116,7 @@ const pull = async (versions, onWork) => {
 
 // Push local changes; last-writer-wins on conflict (take the server copy).
 const push = async (versions, onWork) => {
-  const local = await collectLocal();
+  const local = await collectLocal(versions);
   // upserts (new or locally-changed records) — each isolated so one bad record
   // (unserializable, too large, a decrypt conflict) can't fail the whole sync.
   for (const [blobId, { rec, sha }] of local) {
