@@ -4,7 +4,7 @@
 // bundled into the web build (dynamically imported behind import.meta.env.VITE_OH_WEB).
 
 const DB_NAME = "open-historia-web";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // Object stores mirror the server's on-disk stores (see server/libraryStore.js,
 // mapEditorStore.js, basemapStore.js, flagStore.js). "kv" holds the small
@@ -24,6 +24,12 @@ export const STORES = {
   basemapPayload: "basemapPayload",
   flags: "flags",
   kv: "kv",
+  // Lean per-record projections (id, meta, cover, counts — NEVER the embedded
+  // ~100MB pmtiles/geojson or game snapshots) used to build the library menu
+  // WITHOUT structured-cloning every full scenario/game into memory. Derived +
+  // self-healing, never a source of truth — see libraryStore.js catalog builders.
+  scenarioMeta: "scenarioMeta",
+  gameMeta: "gameMeta",
 };
 
 let dbPromise = null;
@@ -99,8 +105,23 @@ export const idbGet = (store, key) =>
 export const idbGetAll = (store) =>
   runTx(store, "readonly", (tx) => promisifyRequest(tx.objectStore(store).getAll()));
 
+// Primary keys only — never deserializes the record VALUES, so it is cheap even for
+// stores whose rows embed ~100MB binaries. Used to reconcile the lean catalogMeta
+// index against the real stores without materializing them.
+export const idbGetAllKeys = (store) =>
+  runTx(store, "readonly", (tx) => promisifyRequest(tx.objectStore(store).getAllKeys()));
+
 export const idbPut = (store, value) =>
   runTx(store, "readwrite", (tx) => promisifyRequest(tx.objectStore(store).put(value)));
+
+// Write two records in ONE transaction so a record and its derived index row commit —
+// or roll back — together; the index can never be left stale relative to the record.
+export const idbPutPair = (storeA, valueA, storeB, valueB) =>
+  runTx([storeA, storeB], "readwrite", (tx) =>
+    Promise.all([
+      promisifyRequest(tx.objectStore(storeA).put(valueA)),
+      promisifyRequest(tx.objectStore(storeB).put(valueB)),
+    ]));
 
 export const idbDelete = (store, key) =>
   runTx(store, "readwrite", (tx) => promisifyRequest(tx.objectStore(store).delete(key)));

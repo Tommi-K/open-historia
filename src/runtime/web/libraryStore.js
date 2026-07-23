@@ -5,7 +5,7 @@
 // (src/runtime/library.js, assets.js) works exactly as against the real server.
 // Web build only.
 
-import { STORES, idbGet, idbGetAll, idbPut, idbDelete, kvGet, kvPut } from "./idb.js";
+import { STORES, idbGet, idbGetAll, idbGetAllKeys, idbPut, idbPutPair, idbDelete, kvGet, kvPut } from "./idb.js";
 import {
   cloneJson, nowIso, jsonResponse, errorResponse, binaryResponse, base64ToBytes, bytesToBase64,
   parseJsonValue, serializeJsonValue,
@@ -46,8 +46,38 @@ const META_KEYS = ["accentColor", "countryNameOverrides", "description", "eyebro
 
 const getScenario = (id) => idbGet(STORES.scenarios, id);
 const getGame = (id) => idbGet(STORES.games, id);
-const putScenario = (record) => idbPut(STORES.scenarios, record);
-const putGame = (record) => idbPut(STORES.games, record);
+// Lean catalog projections — everything a menu card needs, and NONE of the embedded
+// pmtiles/geojson (scenarios) or snapshots/full json (games). Written beside every
+// record so getLibraryCatalog builds the menu from these instead of structured-
+// cloning the full ~100MB records into memory (the reported laptop menu OOM).
+// jsonAsset / getScenarioAssetStatus / getGameAssetStatus resolve at call time.
+const projectScenarioMeta = (record) => ({
+  id: record.id,
+  meta: record.meta ?? {},
+  cover: record.cover ?? null,
+  assetStatus: getScenarioAssetStatus(record),
+});
+const projectGameMeta = (record) => {
+  const game = jsonAsset(record, "game");
+  const actions = jsonAsset(record, "actions");
+  const events = jsonAsset(record, "events");
+  return {
+    id: record.id,
+    meta: record.meta ?? {},
+    cover: record.cover ?? null,
+    assetStatus: getGameAssetStatus(record),
+    country: String(game?.country ?? "").trim(),
+    currentDate: String(game?.gameDate ?? "").trim(),
+    round: Number.isFinite(Number(game?.round)) && Number(game.round) > 0 ? Math.trunc(Number(game.round)) : 1,
+    eventCount: Array.isArray(events) ? events.length : 0,
+    pendingActions: Array.isArray(actions)
+      ? actions.filter((e) => String(e?.status ?? "").trim() !== "resolved").length : 0,
+  };
+};
+
+// Record + its lean index row commit atomically, so the menu index is never stale.
+const putScenario = (record) => idbPutPair(STORES.scenarios, record, STORES.scenarioMeta, projectScenarioMeta(record));
+const putGame = (record) => idbPutPair(STORES.games, record, STORES.gameMeta, projectGameMeta(record));
 
 const listScenarioIds = async () => new Set((await idbGetAll(STORES.scenarios)).map((r) => r.id));
 const listGameIds = async () => new Set((await idbGetAll(STORES.games)).map((r) => r.id));
@@ -160,25 +190,55 @@ const ensureUniqueId = async (requested, kind) => {
 };
 
 // --- Catalog composition (mirror getScenarioCatalog/getGameCatalog/getLibraryCatalog) ---
-const getScenarioCatalog = async (scenarioRecords, gameRecords) => {
+
+// Reconcile a lean *Meta index against its real store WITHOUT structured-cloning the
+// records: getAllKeys is keys-only (cheap even for rows embedding 100MB binaries).
+// Backfill any record missing from the index — an existing library on its first build
+// after this ships, or a record written by sync (which bypasses putScenario/putGame) —
+// by loading it ONE AT A TIME (peak = a single record, not the whole store at once,
+// which is the OOM), and drop index rows whose record was deleted out-of-band. After
+// the first build the index is populated, so the menu loads NO full records at all.
+const reconcileMeta = async (recordStore, metaStore, project) => {
+  const [keys, metas] = await Promise.all([idbGetAllKeys(recordStore), idbGetAll(metaStore)]);
+  const byId = new Map(metas.map((m) => [m.id, m]));
+  const live = new Set(keys);
+  for (const id of keys) {
+    if (byId.has(id)) continue;
+    const record = await idbGet(recordStore, id); // released before the next iteration
+    if (!record) continue;
+    const proj = project(record);
+    try { await idbPut(metaStore, proj); } catch { /* self-heals next build */ }
+    byId.set(id, proj);
+  }
+  for (const m of metas) {
+    if (live.has(m.id)) continue;
+    try { await idbDelete(metaStore, m.id); } catch { /* self-heals next build */ }
+    byId.delete(m.id);
+  }
+  return [...byId.values()];
+};
+const readScenarioMetas = () => reconcileMeta(STORES.scenarios, STORES.scenarioMeta, projectScenarioMeta);
+const readGameMetas = () => reconcileMeta(STORES.games, STORES.gameMeta, projectGameMeta);
+
+const getScenarioCatalog = async (scenarioMetas, gameMetas) => {
   const manifest = await getScenarioManifest();
-  const records = scenarioRecords ?? await idbGetAll(STORES.scenarios);
-  const byId = new Map(records.map((r) => [r.id, r]));
-  const usage = await getScenarioUsageCounts(gameRecords);
+  const metas = scenarioMetas ?? await readScenarioMetas();
+  const byId = new Map(metas.map((r) => [r.id, r]));
+  const usage = await getScenarioUsageCounts(gameMetas);
   const orderedIds = resolveOrderedIds(manifest.order, new Set(byId.keys()), DEFAULT_SCENARIO_ID);
 
   const scenarios = orderedIds.map((id) => {
-    const record = byId.get(id);
-    if (!record) return null;
-    const meta = readScenarioMeta(id, record.meta ?? {});
-    const assetStatus = getScenarioAssetStatus(record);
+    const proj = byId.get(id);
+    if (!proj) return null;
+    const meta = readScenarioMeta(id, proj.meta ?? {});
+    const assetStatus = proj.assetStatus ?? {};
     const cacheToken = `${id}-${meta.updatedAt}`;
     return {
       ...meta,
       assetStatus,
       cacheToken,
       canDelete: true,
-      coverImageUrl: assetStatus.cover ? coverDataUrl(record.cover) : null,
+      coverImageUrl: assetStatus.cover ? coverDataUrl(proj.cover) : null,
       gameCount: usage.get(id) ?? 0,
     };
   }).filter(Boolean);
@@ -191,47 +251,43 @@ const getScenarioCatalog = async (scenarioRecords, gameRecords) => {
   return { activeScenarioId: selectedScenarioId, scenarios, selectedScenarioId };
 };
 
-const getScenarioUsageCounts = async (gameRecords) => {
+const getScenarioUsageCounts = async (gameMetas) => {
   const counts = new Map();
-  for (const game of gameRecords ?? await idbGetAll(STORES.games)) {
-    const scenarioId = readGameMeta(game.id, game.meta ?? {}).scenarioId;
+  for (const proj of gameMetas ?? await readGameMetas()) {
+    const scenarioId = readGameMeta(proj.id, proj.meta ?? {}).scenarioId;
     counts.set(scenarioId, (counts.get(scenarioId) ?? 0) + 1);
   }
   return counts;
 };
 
-const getGameCatalog = async (scenarioCatalog, gameRecords) => {
+const getGameCatalog = async (scenarioCatalog, gameMetas) => {
   const catalog = scenarioCatalog ?? await getScenarioCatalog();
   const scenarioLookup = new Map(catalog.scenarios.map((s) => [s.id, s]));
   const manifest = await getGameManifest();
-  const records = gameRecords ?? await idbGetAll(STORES.games);
-  const byId = new Map(records.map((r) => [r.id, r]));
+  const metas = gameMetas ?? await readGameMetas();
+  const byId = new Map(metas.map((r) => [r.id, r]));
   const orderedIds = resolveOrderedIds(manifest.order, new Set(byId.keys()), DEFAULT_GAME_ID);
 
   const games = orderedIds.map((id) => {
-    const record = byId.get(id);
-    if (!record) return null;
-    const meta = readGameMeta(id, record.meta ?? {});
-    const assetStatus = getGameAssetStatus(record);
-    const gameData = jsonAsset(record, "game");
-    const actions = jsonAsset(record, "actions");
-    const events = jsonAsset(record, "events");
+    const proj = byId.get(id);
+    if (!proj) return null;
+    const meta = readGameMeta(id, proj.meta ?? {});
+    const assetStatus = proj.assetStatus ?? {};
     const scenario = scenarioLookup.get(meta.scenarioId) ?? readScenarioMeta(meta.scenarioId, {});
-    const pendingActions = Array.isArray(actions) ? actions.filter((e) => String(e?.status ?? "").trim() !== "resolved").length : 0;
     const cacheToken = `${id}-${meta.updatedAt}`;
-    const ownCoverImageUrl = assetStatus.cover ? coverDataUrl(record.cover) : null;
+    const ownCoverImageUrl = assetStatus.cover ? coverDataUrl(proj.cover) : null;
     return {
       ...meta,
       assetStatus,
       cacheToken,
       canDelete: true,
-      country: String(gameData?.country ?? "").trim(),
+      country: proj.country ?? "",
       coverImageUrl: ownCoverImageUrl ?? scenario?.coverImageUrl ?? null,
-      currentDate: String(gameData?.gameDate ?? "").trim(),
-      eventCount: Array.isArray(events) ? events.length : 0,
+      currentDate: proj.currentDate ?? "",
+      eventCount: proj.eventCount ?? 0,
       ownCoverImageUrl,
-      pendingActions,
-      round: Number.isFinite(Number(gameData?.round)) && Number(gameData.round) > 0 ? Math.trunc(Number(gameData.round)) : 1,
+      pendingActions: proj.pendingActions ?? 0,
+      round: proj.round ?? 1,
       scenarioAccentColor: scenario?.accentColor ?? meta.accentColor,
       scenarioName: scenario?.name ?? meta.scenarioId,
     };
@@ -243,13 +299,12 @@ const getGameCatalog = async (scenarioCatalog, gameRecords) => {
 };
 
 const getLibraryCatalog = async () => {
-  // Read each heavy store ONCE and thread the rows through — otherwise
-  // getScenarioCatalog() + getGameCatalog() each re-read them (scenarios x2, games x3),
-  // deserializing every full record (incl. any embedded assets) 2-3x per menu build.
-  const scenarioRecords = await idbGetAll(STORES.scenarios);
-  const gameRecords = await idbGetAll(STORES.games);
-  const scenarioCatalog = await getScenarioCatalog(scenarioRecords, gameRecords);
-  const gameCatalog = await getGameCatalog(scenarioCatalog, gameRecords);
+  // Build the menu from the LEAN meta indexes (reconciled cheaply via getAllKeys) so it
+  // NEVER structured-clones the full ~100MB scenario/game records into memory — the
+  // reported laptop menu OOM. Read each index once and thread it through both builders.
+  const [scenarioMetas, gameMetas] = await Promise.all([readScenarioMetas(), readGameMetas()]);
+  const scenarioCatalog = await getScenarioCatalog(scenarioMetas, gameMetas);
+  const gameCatalog = await getGameCatalog(scenarioCatalog, gameMetas);
   const selectedScenario = scenarioCatalog.scenarios.find((s) => s.id === scenarioCatalog.selectedScenarioId) ?? scenarioCatalog.scenarios[0] ?? null;
   const activeGame = gameCatalog.games.find((g) => g.id === gameCatalog.activeGameId) ?? gameCatalog.games[0] ?? null;
   const runtimeScenario = activeGame && activeGame.scenarioId
@@ -667,6 +722,7 @@ const deleteScenario = async (id) => {
   const usage = await getScenarioUsageCounts();
   if ((usage.get(id) ?? 0) > 0) throw new Error("This scenario is still used by one or more games.");
   await idbDelete(STORES.scenarios, id);
+  try { await idbDelete(STORES.scenarioMeta, id); } catch { /* reconcile drops it next build */ }
   const manifest = await getScenarioManifest();
   const remaining = resolveOrderedIds(manifest.order.filter((e) => e !== id), await listScenarioIds(), DEFAULT_SCENARIO_ID);
   const selectedScenarioId = manifest.selectedScenarioId === id ? (remaining[0] ?? "") : manifest.selectedScenarioId;
@@ -771,6 +827,7 @@ const setActiveGame = async (gameId) => {
 
 const deleteGame = async (id) => {
   await idbDelete(STORES.games, id);
+  try { await idbDelete(STORES.gameMeta, id); } catch { /* reconcile drops it next build */ }
   const manifest = await getGameManifest();
   const remaining = resolveOrderedIds(manifest.order.filter((e) => e !== id), await listGameIds(), DEFAULT_GAME_ID);
   const activeGameId = manifest.activeGameId === id ? (remaining[0] ?? "") : manifest.activeGameId;
