@@ -389,7 +389,7 @@ const ACTIONS_REFERENCE = "[Actions You Can Take]\nThis is the full menu of leve
 const runJsonTask = async (taskKey, {
   fallback,
   signal,
-  timeoutMs = 120000,
+  timeoutMs = getMapSetting(MAP_SETTING_KEYS.limitAiGeneration) ? 120000 : 0,
   userMessage,
   validatePayload,
   variables,
@@ -446,6 +446,12 @@ const runJsonTask = async (taskKey, {
   // take-the-whole-region (default) vs capture-only-the-city (markerOps) distinction.
   if (["jumpForward", "autoJumpForward"].includes(taskKey)) {
     systemPrompt = `${systemPrompt}\n\n[Region and City Capture]\nOn this map, territory is owned by REGIONS, and impacts.regionTransfers MUST name a region exactly as it appears in the [Game Map Description] above — never a city, town, port, or landmark. Cities such as Toulouse or Narbonne are only markers that sit INSIDE a region; a regionTransfer whose regionId is a city name matches no region and is silently discarded, so the border never moves even though the event says it did. To capture a place and the ground around it, transfer the REGION that contains it, and set fromCode to that region\u2019s current owner.\nTaking a region takes everything inside it, cities included — that is the normal case, so a city changing hands usually means transferring its whole region. To capture ONLY a city while its region stays with its current owner (a besieged holdout, an occupied port, an enclave), do NOT name it in regionTransfers; instead emit an impacts.markerOps build for it — {\"op\":\"build\",\"marker\":{\"name\":\"<city>\",\"kind\":\"city\",\"ownerCode\":\"<new holder>\",\"lng\":<lng>,\"lat\":<lat>}} — using that city\u2019s coordinates from [City Coordinates]. That places the city under the new owner without moving the region border.`;
+  }
+
+  // Units kept landing at 0,0 (null island) because the model copied the lng:0,lat:0
+  // placeholder from the output template; guide it to real coordinates.
+  if (["jumpForward", "autoJumpForward"].includes(taskKey)) {
+    systemPrompt = `${systemPrompt}\n\n[Unit Coordinates]\nEvery unitOps spawn and move MUST use the real-world longitude and latitude of where the unit actually is or is going. The lng 0 / lat 0 shown in the output template is ONLY a placeholder \u2014 0,0 is open ocean off West Africa, never a valid position, and a unit placed there is discarded. Set lng and lat to the actual coordinates: use the values from [City Coordinates] for a unit at or near one of those cities, or the real coordinates of the region or front where the action happens.`;
   }
 
   if (["actions", "jumpForward", "autoJumpForward", "catalystCreation", "catalystExecutor"].includes(taskKey)) {
@@ -575,7 +581,7 @@ const consolidateHistoryBatch = async (bundle, events, chats) => {
         buildChatSummaryText(chats, { limit: chats.length || 1 }),
       ].filter(Boolean).join("\n"),
     }),
-    timeoutMs: 60000,
+    timeoutMs: getMapSetting(MAP_SETTING_KEYS.limitAiGeneration) ? 60000 : 0,
     userMessage: "Consolidate the supplied campaign history with the required tool.",
     variables,
   });
@@ -2200,7 +2206,7 @@ export const maybeSendIdleDiplomacy = async ({ chance = IDLE_DIPLOMACY_CHANCE } 
     if (!normalizeString(bundle.game?.country)) return null; // no active game
     const variables = await buildTemplateVariables(bundle);
     const { payload } = await runJsonTask("idleDiplomacy", {
-      timeoutMs: 60000,
+      timeoutMs: getMapSetting(MAP_SETTING_KEYS.limitAiGeneration) ? 60000 : 0,
       userMessage:
         "A quiet moment between rounds. Decide whether any single polity would send the player a short diplomatic note right now. Return JSON only.",
       validatePayload: async (candidate, { finalAttempt } = {}) => {
