@@ -433,6 +433,9 @@ const runJsonTask = async (taskKey, {
     // re-narrated under each new turn's date) that a de-dup can't catch. Appended at
     // call time so existing frozen-prompt campaigns get it too.
     systemPrompt = `${systemPrompt}\n\n[New Developments Only]\nThe events shown to you above have ALREADY happened and appear only as context. Do NOT restate, rephrase, re-report, or re-narrate them. Emit ONLY genuinely NEW developments that occur during THIS period. If an ongoing situation (a war, a crisis, an occupation) has no new development this period, do not emit an event for it.`;
+    // Place renaming: appended at call time so existing frozen-prompt campaigns get it
+    // too; the markerOps rename op ships via the LIVE tool schema either way.
+    systemPrompt = `${systemPrompt}\n\n[Place Renaming]\nYou may rename places when the story warrants it (a city renamed after a leader or ideology, a capital re-designated, a colonial name replaced, a conquered city given the conqueror's name). Emit an impacts.markerOps entry {"op":"rename","name":"<current name>","newName":"<new name>","note":"<why>"}. This works on structures you built AND on existing map cities. Do it sparingly and only when a real event motivates it.`;
   }
 
   // Reputation context: how the world currently regards the player, and how the
@@ -467,13 +470,12 @@ const runJsonTask = async (taskKey, {
   try {
     for (let outputAttempt = 1; outputAttempt <= 2; outputAttempt += 1) {
       const response = await callAI(systemPrompt, history, {
+        // No output-token cap. A long/action-heavy turn's JSON must not be truncated
+        // mid-response — a cut-off response won't parse, so runJsonTask fell back to
+        // canned events that carry NO regionTransfers and NO diplomacy, which is why
+        // the map never changed and no chats opened. main.jsx now lets each provider
+        // use its own model maximum when no maxTokens is passed.
         deadline,
-        // One request budget for every task. This is only a per-response output
-        // ceiling for providers that take one (OpenAI-compatible/Anthropic
-        // floor it at 8192 in main.jsx; Gemini sends no cap at all and ignores
-        // this value entirely) — jump tasks used to request 16384, which only
-        // raised that ceiling on capped providers.
-        maxTokens: 8192,
         signal: controller.signal,
         tool,
       });
@@ -1629,6 +1631,19 @@ export const generateCountryStatSheet = async ({ code, name } = {}) => {
     ].filter(Boolean).join("\n\n"),
     variables,
   });
+  // Persist into world state so the sheet SURVIVES date changes and the AI can mutate
+  // it via polityChanges.stats (see applyEventImpactsToWorld) — "stats persist and only
+  // change when the AI changes them". Re-read the world first to avoid clobbering a
+  // concurrent jump's write.
+  const statCode = normalizeString(code);
+  if (statCode && payload && typeof payload === "object") {
+    try {
+      const world = normalizeWorldState(await readWorldState({ force: true }));
+      await writeWorldState({ ...world, countryStats: { ...world.countryStats, [statCode]: payload } });
+    } catch (error) {
+      console.warn("[ai] failed to persist country stats:", error);
+    }
+  }
   return payload;
 };
 

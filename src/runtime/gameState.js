@@ -21,10 +21,18 @@ export const WORLD_DEFAULTS = {
   // polityChanges and fed back into prompts. Authoritative, unlike the on-demand
   // stat sheet it was first read from.
   internationalReputation: {},
+  // Persisted per-country stat sheets (code -> the full sheet), seeded on first view
+  // and thereafter changed ONLY by the AI (polityChanges.stats), so a country's stats
+  // stop regenerating/drifting every date change.
+  countryStats: {},
   // Per-country tags the AI has changed: owner code -> string[]. The scenario's
   // tags.json holds the map-maker's STARTING tags; this holds every change since,
   // and wins where present (see resolveCountryTags).
   countryTags: {},
+  // AI renames of STOCK map cities (which live in PMTiles, not world.markers):
+  // lowercased original city name -> new display name. world.markers cities are
+  // renamed in place by applyMarkerOps; this is the override layer for the rest.
+  cityRenames: {},
   // Country-label styling, set in the scenario settings. Empty = the defaults
   // (Impact, white letters, half-black outline). The font renders from the
   // PLAYER's local fonts — the style has no glyphs endpoint, so MapLibre v5
@@ -462,6 +470,12 @@ const normalizePolityChange = (entry) => {
     ? normalizeTagList(entry.tags || entry.countryTags)
     : null;
 
+  // Persistent stat-sheet update: keep the partial object as-is (the merge + the Stats
+  // pane tolerate missing/extra fields); null means "no stat change this period".
+  const stats = entry.stats && typeof entry.stats === "object" && !Array.isArray(entry.stats)
+    ? entry.stats
+    : null;
+
   return {
     aliases: normalizeActionParticipants(entry.aliases || entry.additionalNames),
     code,
@@ -469,6 +483,7 @@ const normalizePolityChange = (entry) => {
     name: normalizeOptionalString(entry.name || entry.newName),
     note: normalizeOptionalString(entry.note || entry.reason),
     reputation,
+    stats,
     tags,
   };
 };
@@ -567,6 +582,14 @@ const normalizeMarkerOp = (entry) => {
     return { op: "remove", markerId, name, note: normalizeOptionalString(entry.note) };
   }
 
+  if (op === "rename") {
+    const markerId = normalizeOptionalString(entry.markerId || entry.id);
+    const name = normalizeOptionalString(entry.name || entry.from || entry.oldName);
+    const newName = normalizeOptionalString(entry.newName || entry.to);
+    if ((!markerId && !name) || !newName) return null;
+    return { op: "rename", markerId, name, newName, note: normalizeOptionalString(entry.note) };
+  }
+
   return null;
 };
 
@@ -584,6 +607,11 @@ export const applyMarkerOps = (markers, ops) => {
     } else if (op.op === "remove") {
       next = next.filter((marker) =>
         op.markerId ? marker.id !== op.markerId : marker.name.toLowerCase() !== op.name.toLowerCase());
+    } else if (op.op === "rename") {
+      next = next.map((marker) =>
+        (op.markerId ? marker.id === op.markerId : marker.name.toLowerCase() === (op.name || "").toLowerCase())
+          ? { ...marker, name: op.newName }
+          : marker);
     }
   }
   return next;
@@ -857,10 +885,18 @@ export const normalizeWorldState = (world) => {
       .filter(([country, list]) => country && list.length),
   );
 
+  // Persisted per-country stat sheets: keep each code -> sheet-object entry as-is (the
+  // Stats pane tolerates missing fields). Explicit, not via the spread — new-field trap.
+  const countryStats = Object.fromEntries(
+    Object.entries(nextWorld.countryStats ?? {})
+      .filter(([code, sheet]) => normalizeOptionalString(code) && sheet && typeof sheet === "object"),
+  );
+
   return {
     ...WORLD_DEFAULTS,
     ...nextWorld,
     countryTags,
+    countryStats,
     actionSuggestions: normalizeActionSuggestions(nextWorld.actionSuggestions),
     activeCatalyst: normalizeCatalyst(nextWorld.activeCatalyst),
     consolidatedHistory: normalizeConsolidatedHistory(nextWorld.consolidatedHistory),
@@ -902,6 +938,13 @@ export const normalizeWorldState = (world) => {
       })
       .filter(Boolean),
     markers: normalizeMarkers(nextWorld.markers),
+    // Explicit (not via the ...WORLD_DEFAULTS spread) so this new field survives every
+    // write path — the documented new-world-field trap.
+    cityRenames: Object.fromEntries(
+      Object.entries(nextWorld.cityRenames && typeof nextWorld.cityRenames === "object" ? nextWorld.cityRenames : {})
+        .map(([key, value]) => [normalizeString(key).toLowerCase(), normalizeString(value)])
+        .filter(([key, value]) => key && value),
+    ),
     simulationRules: normalizeOptionalString(nextWorld.simulationRules),
     startingTimelineText: normalizeOptionalString(nextWorld.startingTimelineText),
     units: normalizeUnits(nextWorld.units),
@@ -1086,6 +1129,34 @@ export const applyEventImpactsToWorld = ({ colors = {}, events = [], world }) =>
       // Reputation the AI set this turn becomes the polity's authoritative value.
       if (Number.isFinite(change.reputation)) {
         nextWorld.internationalReputation[change.code] = change.reputation;
+        // Keep the persisted sheet's reputation index in sync with the authoritative value.
+        if (nextWorld.countryStats?.[change.code]?.indices) {
+          nextWorld.countryStats[change.code] = {
+            ...nextWorld.countryStats[change.code],
+            indices: { ...nextWorld.countryStats[change.code].indices, internationalReputation: change.reputation },
+          };
+        }
+      }
+
+      // Persistent stat sheet: merge the AI's changed fields into the stored sheet so a
+      // country's stats change ONLY when the AI changes them (not every date). Deep-merge
+      // the nested groups and mirror the reputation index into the authoritative store.
+      if (change.stats && typeof change.stats === "object") {
+        if (!nextWorld.countryStats || typeof nextWorld.countryStats !== "object") nextWorld.countryStats = {};
+        const prev = nextWorld.countryStats[change.code] && typeof nextWorld.countryStats[change.code] === "object"
+          ? nextWorld.countryStats[change.code]
+          : {};
+        const merged = { ...prev, ...change.stats };
+        for (const group of ["indices", "economy", "gdpBreakdown"]) {
+          if (change.stats[group] && typeof change.stats[group] === "object") {
+            merged[group] = { ...(prev[group] || {}), ...change.stats[group] };
+          }
+        }
+        nextWorld.countryStats[change.code] = merged;
+        const rep = Number(merged.indices?.internationalReputation);
+        if (Number.isFinite(rep)) {
+          nextWorld.internationalReputation[change.code] = Math.max(0, Math.min(100, Math.round(rep)));
+        }
       }
 
       // Tags the AI set this turn replace the scenario's starting tags for this
@@ -1106,7 +1177,20 @@ export const applyEventImpactsToWorld = ({ colors = {}, events = [], world }) =>
     }
 
     if (event.impacts.markerOps?.length) {
+      const before = normalizeMarkers(nextWorld.markers);
       nextWorld.markers = applyMarkerOps(nextWorld.markers, event.impacts.markerOps);
+      // A rename that matched no existing structure is a STOCK-map city rename (stock
+      // cities live in PMTiles, not world.markers) — record it as an override layer so
+      // the label layer can show the new name (see Cities.jsx / cityRenames).
+      for (const raw of normalizeArray(event.impacts.markerOps)) {
+        const op = normalizeMarkerOp(raw);
+        if (!op || op.op !== "rename" || !op.name) continue;
+        const matched = before.some((m) =>
+          op.markerId ? m.id === op.markerId : m.name.toLowerCase() === op.name.toLowerCase());
+        if (!matched) {
+          nextWorld.cityRenames = { ...(nextWorld.cityRenames || {}), [op.name.toLowerCase()]: op.newName };
+        }
+      }
     }
   }
 
