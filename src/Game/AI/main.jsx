@@ -152,25 +152,38 @@ function extractGeminiToolInput(data, tool) {
     return call?.args && typeof call.args === "object" ? call.args : null;
 }
 
+// Qwen/DeepSeek thinking models emit reasoning either in a separate field or inline in
+// <think>...</think>. Strip the think block so we return the actual answer; an unclosed
+// <think> means the stream was cut mid-thought, leaving no answer, so drop it too.
+function stripThinking(value) {
+    if (typeof value !== "string") return "";
+    let out = value.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    const open = out.search(/<think>/i);
+    if (open !== -1) out = out.slice(0, open);
+    return out.trim();
+}
+
 function extractOpenAIMessageText(data) {
-    const content = data?.choices?.[0]?.message?.content;
+    const message = data?.choices?.[0]?.message;
+    const raw = message?.content;
+    let text = "";
 
-    if (typeof content === "string") {
-        return content.trim();
-    }
-
-    if (Array.isArray(content)) {
-        return content
+    if (typeof raw === "string") {
+        text = raw;
+    } else if (Array.isArray(raw)) {
+        text = raw
         .map((part) => {
             if (typeof part === "string") return part;
             if (typeof part?.text === "string") return part.text;
             return "";
         })
-        .join("")
-        .trim();
+        .join("");
     }
 
-    return "";
+    text = stripThinking(text);
+    // All reasoning, no answer (#540): fall back to the reasoning text rather than error.
+    if (!text) text = stripThinking(message?.reasoning);
+    return text;
 }
 
 function extractOpenAIToolInput(data, tool) {
@@ -345,6 +358,7 @@ export async function readOpenAIStreamedResponse(response) {
     const decoder = new TextDecoder();
     let buffer = "";
     let content = "";
+    let reasoning = "";
     let toolName = "";
     let toolArguments = "";
     let finishReason = null;
@@ -365,6 +379,10 @@ export async function readOpenAIStreamedResponse(response) {
                 if (!choice) continue;
                 const delta = choice.delta ?? choice.message ?? {};
                 if (typeof delta.content === "string") content += delta.content;
+                // Thinking-mode models (Qwen3, DeepSeek-R1) stream their chain of thought in a
+                // separate reasoning field; keep it so an all-reasoning delta isn't lost (#540).
+                if (typeof delta.reasoning === "string") reasoning += delta.reasoning;
+                else if (typeof delta.reasoning_content === "string") reasoning += delta.reasoning_content;
                 const call = Array.isArray(delta.tool_calls) ? delta.tool_calls[0] : null;
                 if (call?.function?.name) toolName = call.function.name;
                 if (typeof call?.function?.arguments === "string") toolArguments += call.function.arguments;
@@ -379,6 +397,7 @@ export async function readOpenAIStreamedResponse(response) {
             finish_reason: finishReason,
             message: {
                 content,
+                ...(reasoning ? { reasoning } : {}),
                 ...(toolName || toolArguments
                     ? { tool_calls: [{ type: "function", function: { name: toolName, arguments: toolArguments } }] }
                     : {}),
