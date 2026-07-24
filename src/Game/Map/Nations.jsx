@@ -351,7 +351,11 @@ const buildOwnerLabelCollection = (regionsFC, overrides, polityOverrides, nameRe
     if (props.gid0 && props.country && !countryNameByCode.has(props.gid0)) {
       countryNameByCode.set(props.gid0, props.country);
     }
-    const owner = overrides?.[props.id] ?? props.owner;
+    const rawOwner = overrides?.[props.id] ?? props.owner;
+    // Captured-region override stores the AI's owner CODE ("ESP"); the seed stores the NAME
+    // ("Spain"). Canonicalize so both share one cluster + label instead of the code splitting
+    // off as a phantom new country.
+    const owner = COUNTRY_NAMES[rawOwner] ?? rawOwner;
     if (!owner) continue;
     const best = largestRingOf(allFeatures[index].geometry);
     if (!best || best.area <= 0) continue;
@@ -725,8 +729,11 @@ const WorldMap = ({ isGlobe = false }) => {
   // Resolving the name but not the colour painted those regions a muddy
   // procedural fallback, which reads to a player as "the map didn't annex it".
   const resolveOwnerRgb = useCallback(
-    (owner) => {
-      if (!owner) return null;
+    (rawOwner) => {
+      if (!rawOwner) return null;
+      // Canonicalize an owner CODE ("ESP" from a transfer override) to the NAME the palette
+      // is keyed by ("Spain") so a captured region takes its true owner's colour.
+      const owner = COUNTRY_NAMES[rawOwner] ?? rawOwner;
       const exact = colorMap[owner];
       if (exact) return exact;
       const registry = parseColorToRgb(polityOverrides?.[owner]?.color);
