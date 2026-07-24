@@ -496,7 +496,7 @@ export const normalizeUnitEntry = (entry, index = 0) => {
   const lng = finiteOrNull(entry.lng ?? entry.lon ?? entry.longitude);
   const lat = finiteOrNull(entry.lat ?? entry.latitude);
   const ownerCode = normalizeOptionalString(entry.ownerCode || entry.owner || entry.code);
-  if (lng === null || lat === null || !ownerCode) {
+  if (lng === null || lat === null || (lng === 0 && lat === 0) || !ownerCode) {
     return null;
   }
 
@@ -539,7 +539,7 @@ export const normalizeMarkerEntry = (entry, index = 0) => {
   const lng = finiteOrNull(entry.lng ?? entry.lon ?? entry.longitude);
   const lat = finiteOrNull(entry.lat ?? entry.latitude);
   const name = normalizeOptionalString(entry.name || entry.title);
-  if (lng === null || lat === null || !name) {
+  if (lng === null || lat === null || (lng === 0 && lat === 0) || !name) {
     return null;
   }
 
@@ -640,7 +640,7 @@ const normalizeUnitOp = (entry) => {
   if (op === "move") {
     const toLng = finiteOrNull(entry.toLng ?? entry.lng);
     const toLat = finiteOrNull(entry.toLat ?? entry.lat);
-    if (toLng === null || toLat === null) return null;
+    if (toLng === null || toLat === null || (toLng === 0 && toLat === 0)) return null;
     return {
       op,
       unitId,
